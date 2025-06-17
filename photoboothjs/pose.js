@@ -52,6 +52,22 @@ const MODEL_POINTS = [
   [20.0, 20.0, -30.0]       // Right mouth
 ];
 
+// Add these constants at the top with other constants
+const ARM_LANDMARKS = {
+  LEFT_SHOULDER: 11,
+  LEFT_ELBOW: 13,
+  LEFT_WRIST: 15,
+  RIGHT_SHOULDER: 12,
+  RIGHT_ELBOW: 14,
+  RIGHT_WRIST: 16
+};
+
+// Add these variables with other calibration variables
+let armCalibrationOffset = {
+  left: { x: 0, y: 0, z: 0 },
+  right: { x: 0, y: 0, z: 0 }
+};
+
 async function initPoseDetection() {
   videoElement = document.getElementById('webcam');
   canvasElement = document.createElement('canvas');
@@ -197,7 +213,7 @@ function calculateCalibrationOffset() {
 
   console.log('Calculating calibration offset from', calibrationSamples.length, 'samples');
 
-  // Calculate average of all samples
+  // Calculate head pose calibration offset (existing code)
   const sum = calibrationSamples.reduce((acc, sample) => ({
     x: acc.x + sample.x,
     y: acc.y + sample.y,
@@ -210,7 +226,7 @@ function calculateCalibrationOffset() {
     z: sum.z / calibrationSamples.length
   };
 
-  // Calculate shoulder calibration offset
+  // Calculate shoulder calibration offset (existing code)
   const shoulderSum = calibrationSamples.reduce((acc, sample) => ({
     left: acc.left + (sample.shoulderAngles?.left || 0),
     right: acc.right + (sample.shoulderAngles?.right || 0)
@@ -219,6 +235,33 @@ function calculateCalibrationOffset() {
   shoulderCalibrationOffset = {
     left: shoulderSum.left / calibrationSamples.length,
     right: shoulderSum.right / calibrationSamples.length
+  };
+
+  // Calculate arm calibration offset
+  const armSum = calibrationSamples.reduce((acc, sample) => ({
+    left: {
+      x: acc.left.x + (sample.armAngles?.left?.x || 0),
+      y: acc.left.y + (sample.armAngles?.left?.y || 0),
+      z: acc.left.z + (sample.armAngles?.left?.z || 0)
+    },
+    right: {
+      x: acc.right.x + (sample.armAngles?.right?.x || 0),
+      y: acc.right.y + (sample.armAngles?.right?.y || 0),
+      z: acc.right.z + (sample.armAngles?.right?.z || 0)
+    }
+  }), { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } });
+
+  armCalibrationOffset = {
+    left: {
+      x: armSum.left.x / calibrationSamples.length,
+      y: armSum.left.y / calibrationSamples.length,
+      z: armSum.left.z / calibrationSamples.length
+    },
+    right: {
+      x: armSum.right.x / calibrationSamples.length,
+      y: armSum.right.y / calibrationSamples.length,
+      z: armSum.right.z / calibrationSamples.length
+    }
   };
 
   // Log detailed calibration results
@@ -232,6 +275,18 @@ function calculateCalibrationOffset() {
       left: shoulderCalibrationOffset.left.toFixed(3),
       right: shoulderCalibrationOffset.right.toFixed(3)
     },
+    armOffset: {
+      left: {
+        x: armCalibrationOffset.left.x.toFixed(3),
+        y: armCalibrationOffset.left.y.toFixed(3),
+        z: armCalibrationOffset.left.z.toFixed(3)
+      },
+      right: {
+        x: armCalibrationOffset.right.x.toFixed(3),
+        y: armCalibrationOffset.right.y.toFixed(3),
+        z: armCalibrationOffset.right.z.toFixed(3)
+      }
+    },
     sampleCount: calibrationSamples.length
   });
 
@@ -241,14 +296,23 @@ function calculateCalibrationOffset() {
     !isNaN(calibrationOffset.y) && 
     !isNaN(calibrationOffset.z) &&
     !isNaN(shoulderCalibrationOffset.left) &&
-    !isNaN(shoulderCalibrationOffset.right) // Ensure we have enough samples
+    !isNaN(shoulderCalibrationOffset.right) &&
+    !isNaN(armCalibrationOffset.left.x) &&
+    !isNaN(armCalibrationOffset.left.y) &&
+    !isNaN(armCalibrationOffset.left.z) &&
+    !isNaN(armCalibrationOffset.right.x) &&
+    !isNaN(armCalibrationOffset.right.y) &&
+    !isNaN(armCalibrationOffset.right.z)
   );
 
   if (!isValid) {
     console.warn('Invalid calibration values detected, resetting to zero');
-    console.log(calibrationOffset, shoulderCalibrationOffset)
     calibrationOffset = { x: 0, y: 0, z: 0 };
     shoulderCalibrationOffset = { left: 0, right: 0 };
+    armCalibrationOffset = {
+      left: { x: 0, y: 0, z: 0 },
+      right: { x: 0, y: 0, z: 0 }
+    };
     isCalibrated = false;
     return false;
   }
@@ -288,25 +352,34 @@ function onPoseResults(results) {
     });
 
     const shoulderAngles = calculateShoulderAngles(results.poseLandmarks);
+    const armAngles = calculateArmAngles(results.poseLandmarks);
     
-    // Store the latest shoulder angles for calibration
+    // Store the latest angles for calibration
     window.lastShoulderAngles = shoulderAngles;
+    window.lastArmAngles = armAngles;
     
     if (isCalibrated) {
-      // Only emit and display values if calibration is complete
+      // Emit shoulder angles
       window.dispatchEvent(new CustomEvent('shoulderPoseUpdate', {
         detail: shoulderAngles
       }));
 
-      // Draw debug information for shoulders
+      // Emit arm angles
+      window.dispatchEvent(new CustomEvent('armPoseUpdate', {
+        detail: armAngles
+      }));
+
+      // Draw debug information
       canvasCtx.fillStyle = '#FFFFFF';
       canvasCtx.font = '16px Arial';
+      
+      // Shoulder angles
       canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
       canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
       
-      // Add calibration offset information
-      canvasCtx.fillText(`Calibration Offset - Left: ${shoulderCalibrationOffset.left.toFixed(2)}`, 10, 180);
-      canvasCtx.fillText(`Calibration Offset - Right: ${shoulderCalibrationOffset.right.toFixed(2)}`, 10, 210);
+      // Arm angles
+      canvasCtx.fillText(`Left Arm - X: ${armAngles.left.x.toFixed(2)} Y: ${armAngles.left.y.toFixed(2)} Z: ${armAngles.left.z.toFixed(2)}`, 10, 180);
+      canvasCtx.fillText(`Right Arm - X: ${armAngles.right.x.toFixed(2)} Y: ${armAngles.right.y.toFixed(2)} Z: ${armAngles.right.z.toFixed(2)}`, 10, 210);
     }
   }
 }
@@ -461,6 +534,104 @@ function solvePnP(imagePoints) {
   };
 }
 
+function calculateArmAngles(landmarks) {
+  if (!landmarks) return { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
+
+  // Get relevant landmarks
+  const leftShoulder = landmarks[ARM_LANDMARKS.LEFT_SHOULDER];
+  const leftElbow = landmarks[ARM_LANDMARKS.LEFT_ELBOW];
+  const leftWrist = landmarks[ARM_LANDMARKS.LEFT_WRIST];
+  const rightShoulder = landmarks[ARM_LANDMARKS.RIGHT_SHOULDER];
+  const rightElbow = landmarks[ARM_LANDMARKS.RIGHT_ELBOW];
+  const rightWrist = landmarks[ARM_LANDMARKS.RIGHT_WRIST];
+
+  // Calculate left arm angles
+  const leftArmAngles = calculateArmRotation(
+    leftShoulder,
+    leftElbow,
+    leftWrist,
+    { x: leftShoulder.x, y: leftShoulder.y - 1 } // Reference point above shoulder
+  );
+
+  // Calculate right arm angles
+  const rightArmAngles = calculateArmRotation(
+    rightShoulder,
+    rightElbow,
+    rightWrist,
+    { x: rightShoulder.x, y: rightShoulder.y - 1 } // Reference point above shoulder
+  );
+
+  // Apply calibration offset
+  const calibratedAngles = {
+    left: {
+      x: leftArmAngles.x - armCalibrationOffset.left.x,
+      y: leftArmAngles.y - armCalibrationOffset.left.y,
+      z: leftArmAngles.z - armCalibrationOffset.left.z
+    },
+    right: {
+      x: rightArmAngles.x - armCalibrationOffset.right.x,
+      y: rightArmAngles.y - armCalibrationOffset.right.y,
+      z: rightArmAngles.z - armCalibrationOffset.right.z
+    }
+  };
+
+  // Log arm angles for debugging
+  console.log('Arm angles:', calibratedAngles);
+
+  return calibratedAngles;
+}
+
+function calculateArmRotation(shoulder, elbow, wrist, reference) {
+  // Calculate vectors for the arm segments
+  const upperArm = {
+    x: elbow.x - shoulder.x,
+    y: elbow.y - shoulder.y,
+    z: elbow.z - shoulder.z
+  };
+
+  const forearm = {
+    x: wrist.x - elbow.x,
+    y: wrist.y - elbow.y,
+    z: wrist.z - elbow.z
+  };
+
+  // Calculate the reference vector (pointing up from shoulder)
+  const referenceVector = {
+    x: reference.x - shoulder.x,
+    y: reference.y - shoulder.y,
+    z: 0
+  };
+
+  // Calculate rotation angles using cross products and dot products
+  const xRotation = calculateAngleBetweenVectors(upperArm, referenceVector);
+  const yRotation = calculateAngleBetweenVectors(upperArm, { x: 1, y: 0, z: 0 });
+  const zRotation = calculateAngleBetweenVectors(upperArm, { x: 0, y: 0, z: 1 });
+
+  return {
+    x: xRotation,
+    y: yRotation,
+    z: zRotation
+  };
+}
+
+function calculateAngleBetweenVectors(v1, v2) {
+  const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+  const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z);
+  const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z);
+  
+  const cos = dot / (mag1 * mag2);
+  const angle = Math.acos(Math.max(-1, Math.min(1, cos)));
+  
+  // Determine direction using cross product
+  const cross = {
+    x: v1.y * v2.z - v1.z * v2.y,
+    y: v1.z * v2.x - v1.x * v2.z,
+    z: v1.x * v2.y - v1.y * v2.x
+  };
+  
+  return cross.z > 0 ? angle : -angle;
+}
+
 function onFaceMeshResults(results) {
   // Set canvas dimensions to match video
   canvasElement.width = videoElement.videoWidth;
@@ -486,20 +657,21 @@ function onFaceMeshResults(results) {
         const currentTime = Date.now();
         const elapsedTime = currentTime - calibrationStartTime;
         
-        // Sample every CALIBRATION_SAMPLE_RATE ms
-        if (elapsedTime % CALIBRATION_SAMPLE_RATE < 16) { // 16ms is roughly one frame
+        if (elapsedTime % CALIBRATION_SAMPLE_RATE < 16) {
           const rotationAngles = calculateHeadPose(landmarks);
-          // Get current shoulder angles if available
           const shoulderAngles = window.lastShoulderAngles || { left: 0, right: 0 };
+          const armAngles = window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           
           calibrationSamples.push({
             ...rotationAngles,
-            shoulderAngles
+            shoulderAngles,
+            armAngles
           });
           
           console.log('Calibration sample collected:', {
             head: rotationAngles,
             shoulders: shoulderAngles,
+            arms: armAngles,
             sampleCount: calibrationSamples.length
           });
         }
