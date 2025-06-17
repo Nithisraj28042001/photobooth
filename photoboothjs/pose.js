@@ -14,6 +14,7 @@ let canvasCtx;
 let isCalibrating = false;
 let calibrationSamples = [];
 let calibrationOffset = { x: 0, y: 0, z: 0 };
+let shoulderCalibrationOffset = { left: 0, right: 0 };
 let calibrationStartTime = null;
 const CALIBRATION_DURATION = 3000; // 3 seconds
 const CALIBRATION_SAMPLE_RATE = 100; // Sample every 100ms
@@ -27,6 +28,16 @@ const FACE_LANDMARKS = {
   RIGHT_EAR: 454,
   LEFT_MOUTH: 61,
   RIGHT_MOUTH: 291
+};
+
+// Body pose landmarks for shoulders
+const POSE_LANDMARKS = {
+  LEFT_SHOULDER: 11,
+  RIGHT_SHOULDER: 12,
+  LEFT_ELBOW: 13,
+  RIGHT_ELBOW: 14,
+  LEFT_WRIST: 15,
+  RIGHT_WRIST: 16
 };
 
 // 3D model reference points (in mm)
@@ -55,53 +66,64 @@ async function initPoseDetection() {
   document.querySelector('.container').appendChild(canvasElement);
   canvasCtx = canvasElement.getContext('2d');
 
-  // Initialize MediaPipe Pose
-  pose = new poseDetection.Pose({
-    locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-    }
-  });
+  try {
+    // Initialize MediaPipe Face Mesh
+    faceMeshDetector = new faceMesh.FaceMesh({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1646424915/${file}`;
+      }
+    });
 
-  pose.setOptions({
-    modelComplexity: 1,
-    smoothLandmarks: true,
-    enableSegmentation: true,
-    smoothSegmentation: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
+    faceMeshDetector.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
 
-  pose.onResults(onPoseResults);
+    // Initialize MediaPipe Pose
+    pose = new poseDetection.Pose({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
+      }
+    });
 
-  // Initialize MediaPipe Face Mesh
-  faceMeshDetector = new faceMesh.FaceMesh({
-    locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-    }
-  });
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: true,
+      smoothSegmentation: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
 
-  faceMeshDetector.setOptions({
-    maxNumFaces: 1,
-    refineLandmarks: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
+    faceMeshDetector.onResults(onFaceMeshResults);
+    pose.onResults(onPoseResults);
 
-  faceMeshDetector.onResults(onFaceMeshResults);
+    // Initialize camera
+    camera = new Camera(videoElement, {
+      onFrame: async () => {
+        try {
+          await Promise.all([
+            faceMeshDetector.send({image: videoElement}),
+            pose.send({image: videoElement})
+          ]);
+        } catch (error) {
+          console.error('Error processing frame:', error);
+        }
+      },
+      width: 1280,
+      height: 720
+    });
 
-  // Initialize camera
-  camera = new Camera(videoElement, {
-    onFrame: async () => {
-      await pose.send({image: videoElement});
-      await faceMeshDetector.send({image: videoElement});
-    },
-    width: 1280,
-    height: 720
-  });
-  camera.start();
-
-  // Start calibration after a short delay
-  setTimeout(startCalibration, 1000);
+    await camera.start();
+    console.log('Camera started successfully');
+    
+    // Start calibration after a short delay
+    setTimeout(startCalibration, 1000);
+  } catch (error) {
+    console.error('Error initializing MediaPipe:', error);
+  }
 }
 
 function startCalibration() {
@@ -112,7 +134,7 @@ function startCalibration() {
   // Show calibration message
   canvasCtx.fillStyle = '#FFFFFF';
   canvasCtx.font = '24px Arial';
-  canvasCtx.fillText('Please face the camera straight for 3 seconds...', 10, 30);
+  canvasCtx.fillText('Please face the camera straight and keep shoulders level for 3 seconds...', 10, 30);
 }
 
 function calculateCalibrationOffset() {
@@ -131,7 +153,18 @@ function calculateCalibrationOffset() {
     z: sum.z / calibrationSamples.length
   };
 
-  console.log('Calibration offset:', calibrationOffset);
+  // Calculate shoulder calibration offset
+  const shoulderSum = calibrationSamples.reduce((acc, sample) => ({
+    left: acc.left + (sample.shoulderAngles?.left || 0),
+    right: acc.right + (sample.shoulderAngles?.right || 0)
+  }), { left: 0, right: 0 });
+
+  shoulderCalibrationOffset = {
+    left: shoulderSum.left / calibrationSamples.length,
+    right: shoulderSum.right / calibrationSamples.length
+  };
+
+  console.log('Calibration offsets:', { head: calibrationOffset, shoulders: shoulderCalibrationOffset });
 }
 
 function onPoseResults(results) {
@@ -163,7 +196,70 @@ function onPoseResults(results) {
         landmark.x * canvasElement.width, 
         landmark.y * canvasElement.height);
     });
+
+    const shoulderAngles = calculateShoulderAngles(results.poseLandmarks);
+    
+    // Emit shoulder angles
+    window.dispatchEvent(new CustomEvent('shoulderPoseUpdate', {
+      detail: shoulderAngles
+    }));
+
+    // Draw debug information for shoulders
+    canvasCtx.fillStyle = '#FFFFFF';
+    canvasCtx.font = '16px Arial';
+    canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
+    canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
   }
+}
+
+function calculateShoulderAngles(landmarks) {
+  if (!landmarks) return { left: 0, right: 0 };
+
+  const leftShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
+  const rightShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
+  const leftElbow = landmarks[POSE_LANDMARKS.LEFT_ELBOW];
+  const rightElbow = landmarks[POSE_LANDMARKS.RIGHT_ELBOW];
+
+  // Calculate left shoulder angle
+  const leftAngle = calculateAngle(
+    leftShoulder,
+    leftElbow,
+    { x: leftShoulder.x, y: leftShoulder.y - 1 } // Reference point above shoulder
+  );
+
+  // Calculate right shoulder angle
+  const rightAngle = calculateAngle(
+    rightShoulder,
+    rightElbow,
+    { x: rightShoulder.x, y: rightShoulder.y - 1 } // Reference point above shoulder
+  );
+
+  return {
+    left: leftAngle - shoulderCalibrationOffset.left,
+    right: rightAngle - shoulderCalibrationOffset.right
+  };
+}
+
+function calculateAngle(point1, point2, reference) {
+  const v1 = {
+    x: point1.x - reference.x,
+    y: point1.y - reference.y
+  };
+  const v2 = {
+    x: point2.x - reference.x,
+    y: point2.y - reference.y
+  };
+
+  const dot = v1.x * v2.x + v1.y * v2.y;
+  const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+  const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+  
+  const cos = dot / (mag1 * mag2);
+  const angle = Math.acos(Math.max(-1, Math.min(1, cos)));
+  
+  // Determine direction (clockwise or counterclockwise)
+  const cross = v1.x * v2.y - v1.y * v2.x;
+  return cross > 0 ? angle : -angle;
 }
 
 function calculateHeadPose(landmarks) {

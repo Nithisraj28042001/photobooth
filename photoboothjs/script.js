@@ -28,6 +28,8 @@ light.position.set(1, 1, 1);
 scene.add(light);
 
 let headBone = null;
+let leftShoulderBone = null;
+let rightShoulderBone = null;
 
 // Load GLB model
 const loader = new GLTFLoader();
@@ -37,11 +39,19 @@ loader.load('models/demo.glb', (gltf) => {
   model.position.set(0, -1.5, 0);
   scene.add(model);
 
-  // Find the head bone
+  // Find the bones
   model.traverse((obj) => {
-    if (obj.isBone && obj.name.toLowerCase().includes('head')) {
-      headBone = obj;
-      console.log("Found head bone:", obj.name);
+    if (obj.isBone) {
+      if (obj.name.toLowerCase().includes('head')) {
+        headBone = obj;
+        console.log("Found head bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('shoulderl')) {
+        leftShoulderBone = obj;
+        console.log("Found left shoulder bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('shoulderr')) {
+        rightShoulderBone = obj;
+        console.log("Found right shoulder bone:", obj.name);
+      }
     }
   });
 
@@ -56,12 +66,24 @@ camera.position.z = 3;
 window.addEventListener('headPoseUpdate', (event) => {
   if (headBone) {
     const { x, y, z } = event.detail;
-    
-    // Apply rotations to the head bone
-    // Note: You might need to adjust these multipliers based on your model's scale
-    headBone.rotation.x = -x;  // Pitch
-    headBone.rotation.y = -y  ;  // Yaw
-    headBone.rotation.z = -z ;  // Roll
+    headBone.rotation.x = -x;
+    headBone.rotation.y = -y;
+    headBone.rotation.z = -z;
+  }
+});
+
+// Listen for shoulder pose updates
+window.addEventListener('shoulderPoseUpdate', (event) => {
+  const { left, right } = event.detail;
+  
+  if (leftShoulderBone) {
+    // Convert the angle to radians and apply to the appropriate axis
+    // You might need to adjust the axis and multiplier based on your model
+    leftShoulderBone.rotation.y = left * 2 ;
+  }
+  
+  if (rightShoulderBone) {
+    rightShoulderBone.rotation.y = right * 2 ;
   }
 });
 

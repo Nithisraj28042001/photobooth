@@ -4,9 +4,9 @@
   "description": "3D Avatar with Pose Detection",
   "type": "module",
   "dependencies": {
-    "@mediapipe/camera_utils": "^0.3.1620248074",
-    "@mediapipe/drawing_utils": "^0.3.1620248074",
-    "@mediapipe/face_mesh": "^0.4.1633559619",
-    "@mediapipe/pose": "^0.5.1675469404"
+    "@mediapipe/pose": "0.5.1675469404",
+    "@mediapipe/face_mesh": "0.4.1646424915",
+    "@mediapipe/camera_utils": "0.3.1620248074",
+    "@mediapipe/drawing_utils": "0.3.1620248074"
   }
 }
