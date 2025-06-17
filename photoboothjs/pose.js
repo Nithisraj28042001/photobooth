@@ -68,6 +68,12 @@ let armCalibrationOffset = {
   right: { x: 0, y: 0, z: 0 }
 };
 
+// Add these variables with other calibration variables
+let forearmCalibrationOffset = {
+  left: { x: 0, y: 0, z: 0 },
+  right: { x: 0, y: 0, z: 0 }
+};
+
 async function initPoseDetection() {
   videoElement = document.getElementById('webcam');
   canvasElement = document.createElement('canvas');
@@ -264,6 +270,33 @@ function calculateCalibrationOffset() {
     }
   };
 
+  // Calculate forearm calibration offset
+  const forearmSum = calibrationSamples.reduce((acc, sample) => ({
+    left: {
+      x: acc.left.x + (sample.forearmAngles?.left?.x || 0),
+      y: acc.left.y + (sample.forearmAngles?.left?.y || 0),
+      z: acc.left.z + (sample.forearmAngles?.left?.z || 0)
+    },
+    right: {
+      x: acc.right.x + (sample.forearmAngles?.right?.x || 0),
+      y: acc.right.y + (sample.forearmAngles?.right?.y || 0),
+      z: acc.right.z + (sample.forearmAngles?.right?.z || 0)
+    }
+  }), { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } });
+
+  forearmCalibrationOffset = {
+    left: {
+      x: forearmSum.left.x / calibrationSamples.length,
+      y: forearmSum.left.y / calibrationSamples.length,
+      z: forearmSum.left.z / calibrationSamples.length
+    },
+    right: {
+      x: forearmSum.right.x / calibrationSamples.length,
+      y: forearmSum.right.y / calibrationSamples.length,
+      z: forearmSum.right.z / calibrationSamples.length
+    }
+  };
+
   // Log detailed calibration results
   console.log('Calibration complete:', {
     headOffset: {
@@ -287,6 +320,18 @@ function calculateCalibrationOffset() {
         z: armCalibrationOffset.right.z.toFixed(3)
       }
     },
+    forearmOffset: {
+      left: {
+        x: forearmCalibrationOffset.left.x.toFixed(3),
+        y: forearmCalibrationOffset.left.y.toFixed(3),
+        z: forearmCalibrationOffset.left.z.toFixed(3)
+      },
+      right: {
+        x: forearmCalibrationOffset.right.x.toFixed(3),
+        y: forearmCalibrationOffset.right.y.toFixed(3),
+        z: forearmCalibrationOffset.right.z.toFixed(3)
+      }
+    },
     sampleCount: calibrationSamples.length
   });
 
@@ -302,7 +347,13 @@ function calculateCalibrationOffset() {
     !isNaN(armCalibrationOffset.left.z) &&
     !isNaN(armCalibrationOffset.right.x) &&
     !isNaN(armCalibrationOffset.right.y) &&
-    !isNaN(armCalibrationOffset.right.z)
+    !isNaN(armCalibrationOffset.right.z) &&
+    !isNaN(forearmCalibrationOffset.left.x) &&
+    !isNaN(forearmCalibrationOffset.left.y) &&
+    !isNaN(forearmCalibrationOffset.left.z) &&
+    !isNaN(forearmCalibrationOffset.right.x) &&
+    !isNaN(forearmCalibrationOffset.right.y) &&
+    !isNaN(forearmCalibrationOffset.right.z)
   );
 
   if (!isValid) {
@@ -310,6 +361,10 @@ function calculateCalibrationOffset() {
     calibrationOffset = { x: 0, y: 0, z: 0 };
     shoulderCalibrationOffset = { left: 0, right: 0 };
     armCalibrationOffset = {
+      left: { x: 0, y: 0, z: 0 },
+      right: { x: 0, y: 0, z: 0 }
+    };
+    forearmCalibrationOffset = {
       left: { x: 0, y: 0, z: 0 },
       right: { x: 0, y: 0, z: 0 }
     };
@@ -353,10 +408,12 @@ function onPoseResults(results) {
 
     const shoulderAngles = calculateShoulderAngles(results.poseLandmarks);
     const armAngles = calculateArmAngles(results.poseLandmarks);
+    const forearmAngles = calculateForearmAngles(results.poseLandmarks);
     
     // Store the latest angles for calibration
     window.lastShoulderAngles = shoulderAngles;
     window.lastArmAngles = armAngles;
+    window.lastForearmAngles = forearmAngles;
     
     if (isCalibrated) {
       // Emit shoulder angles
@@ -369,7 +426,12 @@ function onPoseResults(results) {
         detail: armAngles
       }));
 
-      // Draw debug information
+      // Emit forearm angles
+      window.dispatchEvent(new CustomEvent('forearmPoseUpdate', {
+        detail: forearmAngles
+      }));
+
+      // Draw debug information with more detail
       canvasCtx.fillStyle = '#FFFFFF';
       canvasCtx.font = '16px Arial';
       
@@ -377,9 +439,28 @@ function onPoseResults(results) {
       canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
       canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
       
-      // Arm angles
-      canvasCtx.fillText(`Left Arm - X: ${armAngles.left.x.toFixed(2)} Y: ${armAngles.left.y.toFixed(2)} Z: ${armAngles.left.z.toFixed(2)}`, 10, 180);
-      canvasCtx.fillText(`Right Arm - X: ${armAngles.right.x.toFixed(2)} Y: ${armAngles.right.y.toFixed(2)} Z: ${armAngles.right.z.toFixed(2)}`, 10, 210);
+      // Arm angles with axis labels
+      canvasCtx.fillText(`Left Arm - F/B: ${armAngles.left.x.toFixed(2)} L/R: ${armAngles.left.y.toFixed(2)} T: ${armAngles.left.z.toFixed(2)}`, 10, 180);
+      canvasCtx.fillText(`Right Arm - F/B: ${armAngles.right.x.toFixed(2)} L/R: ${armAngles.right.y.toFixed(2)} T: ${armAngles.right.z.toFixed(2)}`, 10, 210);
+      
+      // Forearm angles with axis labels
+      canvasCtx.fillText(`Left Forearm - F/B: ${forearmAngles.left.x.toFixed(2)} L/R: ${forearmAngles.left.y.toFixed(2)} T: ${forearmAngles.left.z.toFixed(2)}`, 10, 240);
+      canvasCtx.fillText(`Right Forearm - F/B: ${forearmAngles.right.x.toFixed(2)} L/R: ${forearmAngles.right.y.toFixed(2)} T: ${forearmAngles.right.z.toFixed(2)}`, 10, 270);
+
+      // Draw angle between upper arm and forearm
+      const leftElbowAngle = calculateElbowAngle(
+        results.poseLandmarks[ARM_LANDMARKS.LEFT_SHOULDER],
+        results.poseLandmarks[ARM_LANDMARKS.LEFT_ELBOW],
+        results.poseLandmarks[ARM_LANDMARKS.LEFT_WRIST]
+      );
+      const rightElbowAngle = calculateElbowAngle(
+        results.poseLandmarks[ARM_LANDMARKS.RIGHT_SHOULDER],
+        results.poseLandmarks[ARM_LANDMARKS.RIGHT_ELBOW],
+        results.poseLandmarks[ARM_LANDMARKS.RIGHT_WRIST]
+      );
+      
+      canvasCtx.fillText(`Left Elbow Angle: ${leftElbowAngle.toFixed(2)}°`, 10, 300);
+      canvasCtx.fillText(`Right Elbow Angle: ${rightElbowAngle.toFixed(2)}°`, 10, 330);
     }
   }
 }
@@ -589,47 +670,180 @@ function calculateArmRotation(shoulder, elbow, wrist, reference) {
     z: elbow.z - shoulder.z
   };
 
+  // Calculate the reference vectors
+  const upVector = {
+    x: reference.x - shoulder.x,
+    y: reference.y - shoulder.y,
+    z: 0
+  };
+
+  const forwardVector = {
+    x: 0,
+    y: 0,
+    z: 1
+  };
+
+  const rightVector = {
+    x: 1,
+    y: 0,
+    z: 0
+  };
+
+  // Calculate rotation angles using cross products and dot products
+  // X rotation (forward/backward) - relative to up vector
+  const xRotation = calculateAngleBetweenVectors(upperArm, upVector);
+  
+  // Y rotation (left/right) - relative to forward vector
+  const yRotation = calculateAngleBetweenVectors(upperArm, forwardVector);
+  
+  // Z rotation (twist) - relative to right vector
+  const zRotation = calculateAngleBetweenVectors(upperArm, rightVector);
+
+  // Apply scaling factors to make movements more natural
+  return {
+    x: xRotation * 1.5, // Increase forward/backward sensitivity
+    y: yRotation * 2.0, // Increase left/right sensitivity
+    z: zRotation * 1.0  // Keep twist sensitivity as is
+  };
+}
+
+function calculateAngleBetweenVectors(v1, v2) {
+  // Normalize vectors
+  const normalize = (v) => {
+    const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return {
+      x: v.x / length,
+      y: v.y / length,
+      z: v.z / length
+    };
+  };
+
+  const n1 = normalize(v1);
+  const n2 = normalize(v2);
+
+  // Calculate dot product
+  const dot = n1.x * n2.x + n1.y * n2.y + n1.z * n2.z;
+  
+  // Calculate cross product
+  const cross = {
+    x: n1.y * n2.z - n1.z * n2.y,
+    y: n1.z * n2.x - n1.x * n2.z,
+    z: n1.x * n2.y - n1.y * n2.x
+  };
+
+  // Calculate angle
+  const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+
+  // Determine direction using cross product
+  const direction = cross.z > 0 ? 1 : -1;
+
+  // Apply direction and convert to degrees for easier debugging
+  const angleInDegrees = angle * (180 / Math.PI) * direction;
+
+  // Log detailed angle calculation for debugging
+  console.log('Angle calculation:', {
+    vectors: {
+      v1: { x: v1.x.toFixed(3), y: v1.y.toFixed(3), z: v1.z.toFixed(3) },
+      v2: { x: v2.x.toFixed(3), y: v2.y.toFixed(3), z: v2.z.toFixed(3) }
+    },
+    normalized: {
+      n1: { x: n1.x.toFixed(3), y: n1.y.toFixed(3), z: n1.z.toFixed(3) },
+      n2: { x: n2.x.toFixed(3), y: n2.y.toFixed(3), z: n2.z.toFixed(3) }
+    },
+    dot: dot.toFixed(3),
+    cross: { x: cross.x.toFixed(3), y: cross.y.toFixed(3), z: cross.z.toFixed(3) },
+    angle: angleInDegrees.toFixed(3)
+  });
+
+  return angleInDegrees * (Math.PI / 180); // Convert back to radians
+}
+
+function calculateForearmAngles(landmarks) {
+  if (!landmarks) return { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
+
+  // Get relevant landmarks
+  const leftElbow = landmarks[ARM_LANDMARKS.LEFT_ELBOW];
+  const leftWrist = landmarks[ARM_LANDMARKS.LEFT_WRIST];
+  const rightElbow = landmarks[ARM_LANDMARKS.RIGHT_ELBOW];
+  const rightWrist = landmarks[ARM_LANDMARKS.RIGHT_WRIST];
+
+  // Calculate left forearm angles
+  const leftForearmAngles = calculateForearmRotation(
+    leftElbow,
+    leftWrist,
+    { x: leftElbow.x, y: leftElbow.y - 1 } // Reference point above elbow
+  );
+
+  // Calculate right forearm angles
+  const rightForearmAngles = calculateForearmRotation(
+    rightElbow,
+    rightWrist,
+    { x: rightElbow.x, y: rightElbow.y - 1 } // Reference point above elbow
+  );
+
+  // Apply calibration offset
+  const calibratedAngles = {
+    left: {
+      x: leftForearmAngles.x - forearmCalibrationOffset.left.x,
+      y: leftForearmAngles.y - forearmCalibrationOffset.left.y,
+      z: leftForearmAngles.z - forearmCalibrationOffset.left.z
+    },
+    right: {
+      x: rightForearmAngles.x - forearmCalibrationOffset.right.x,
+      y: rightForearmAngles.y - forearmCalibrationOffset.right.y,
+      z: rightForearmAngles.z - forearmCalibrationOffset.right.z
+    }
+  };
+
+  // Log forearm angles for debugging
+  console.log('Forearm angles:', calibratedAngles);
+
+  return calibratedAngles;
+}
+
+function calculateForearmRotation(elbow, wrist, reference) {
+  // Calculate forearm vector
   const forearm = {
     x: wrist.x - elbow.x,
     y: wrist.y - elbow.y,
     z: wrist.z - elbow.z
   };
 
-  // Calculate the reference vector (pointing up from shoulder)
-  const referenceVector = {
-    x: reference.x - shoulder.x,
-    y: reference.y - shoulder.y,
+  // Calculate the reference vectors
+  const upVector = {
+    x: reference.x - elbow.x,
+    y: reference.y - elbow.y,
+    z: 0
+  };
+
+  const forwardVector = {
+    x: 0,
+    y: 0,
+    z: 1
+  };
+
+  const rightVector = {
+    x: 1,
+    y: 0,
     z: 0
   };
 
   // Calculate rotation angles using cross products and dot products
-  const xRotation = calculateAngleBetweenVectors(upperArm, referenceVector);
-  const yRotation = calculateAngleBetweenVectors(upperArm, { x: 1, y: 0, z: 0 });
-  const zRotation = calculateAngleBetweenVectors(upperArm, { x: 0, y: 0, z: 1 });
+  // X rotation (forward/backward) - relative to up vector
+  const xRotation = calculateAngleBetweenVectors(forearm, upVector);
+  
+  // Y rotation (left/right) - relative to forward vector
+  const yRotation = calculateAngleBetweenVectors(forearm, forwardVector);
+  
+  // Z rotation (twist) - relative to right vector
+  const zRotation = calculateAngleBetweenVectors(forearm, rightVector);
 
+  // Apply scaling factors to make movements more natural
   return {
-    x: xRotation,
-    y: yRotation,
-    z: zRotation
+    x: xRotation * 1.5, // Increase forward/backward sensitivity
+    y: yRotation * 2.0, // Increase left/right sensitivity
+    z: zRotation * 1.0  // Keep twist sensitivity as is
   };
-}
-
-function calculateAngleBetweenVectors(v1, v2) {
-  const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
-  const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z);
-  const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z);
-  
-  const cos = dot / (mag1 * mag2);
-  const angle = Math.acos(Math.max(-1, Math.min(1, cos)));
-  
-  // Determine direction using cross product
-  const cross = {
-    x: v1.y * v2.z - v1.z * v2.y,
-    y: v1.z * v2.x - v1.x * v2.z,
-    z: v1.x * v2.y - v1.y * v2.x
-  };
-  
-  return cross.z > 0 ? angle : -angle;
 }
 
 function onFaceMeshResults(results) {
@@ -661,17 +875,20 @@ function onFaceMeshResults(results) {
           const rotationAngles = calculateHeadPose(landmarks);
           const shoulderAngles = window.lastShoulderAngles || { left: 0, right: 0 };
           const armAngles = window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
+          const forearmAngles = window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           
           calibrationSamples.push({
             ...rotationAngles,
             shoulderAngles,
-            armAngles
+            armAngles,
+            forearmAngles
           });
           
           console.log('Calibration sample collected:', {
             head: rotationAngles,
             shoulders: shoulderAngles,
             arms: armAngles,
+            forearms: forearmAngles,
             sampleCount: calibrationSamples.length
           });
         }
@@ -719,6 +936,43 @@ function onFaceMeshResults(results) {
       }
     }
   }
+}
+
+// Add function to calculate elbow angle
+function calculateElbowAngle(shoulder, elbow, wrist) {
+  // Calculate vectors
+  const upperArm = {
+    x: elbow.x - shoulder.x,
+    y: elbow.y - shoulder.y,
+    z: elbow.z - shoulder.z
+  };
+  
+  const forearm = {
+    x: wrist.x - elbow.x,
+    y: wrist.y - elbow.y,
+    z: wrist.z - elbow.z
+  };
+
+  // Normalize vectors
+  const normalize = (v) => {
+    const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return {
+      x: v.x / length,
+      y: v.y / length,
+      z: v.z / length
+    };
+  };
+
+  const n1 = normalize(upperArm);
+  const n2 = normalize(forearm);
+
+  // Calculate dot product
+  const dot = n1.x * n2.x + n1.y * n2.y + n1.z * n2.z;
+  
+  // Calculate angle in degrees
+  const angle = Math.acos(Math.max(-1, Math.min(1, dot))) * (180 / Math.PI);
+
+  return angle;
 }
 
 // Initialize when the page loads
