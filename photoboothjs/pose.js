@@ -18,6 +18,7 @@ let shoulderCalibrationOffset = { left: 0, right: 0 };
 let calibrationStartTime = null;
 const CALIBRATION_DURATION = 3000; // 3 seconds
 const CALIBRATION_SAMPLE_RATE = 100; // Sample every 100ms
+let isCalibrated = false;
 
 // Head pose estimation variables
 const FACE_LANDMARKS = {
@@ -184,10 +185,17 @@ function startCalibration() {
   canvasCtx.fillStyle = '#FFFFFF';
   canvasCtx.font = '24px Arial';
   canvasCtx.fillText('Please face the camera straight and keep shoulders level for 3 seconds...', 10, 30);
+  
+  console.log('Starting calibration...');
 }
 
 function calculateCalibrationOffset() {
-  if (calibrationSamples.length === 0) return;
+  if (calibrationSamples.length === 0) {
+    console.warn('No calibration samples collected');
+    return false;
+  }
+
+  console.log('Calculating calibration offset from', calibrationSamples.length, 'samples');
 
   // Calculate average of all samples
   const sum = calibrationSamples.reduce((acc, sample) => ({
@@ -213,7 +221,40 @@ function calculateCalibrationOffset() {
     right: shoulderSum.right / calibrationSamples.length
   };
 
-  console.log('Calibration offsets:', { head: calibrationOffset, shoulders: shoulderCalibrationOffset });
+  // Log detailed calibration results
+  console.log('Calibration complete:', {
+    headOffset: {
+      x: calibrationOffset.x.toFixed(3),
+      y: calibrationOffset.y.toFixed(3),
+      z: calibrationOffset.z.toFixed(3)
+    },
+    shoulderOffset: {
+      left: shoulderCalibrationOffset.left.toFixed(3),
+      right: shoulderCalibrationOffset.right.toFixed(3)
+    },
+    sampleCount: calibrationSamples.length
+  });
+
+  // Validate calibration results
+  const isValid = (
+    !isNaN(calibrationOffset.x) && 
+    !isNaN(calibrationOffset.y) && 
+    !isNaN(calibrationOffset.z) &&
+    !isNaN(shoulderCalibrationOffset.left) &&
+    !isNaN(shoulderCalibrationOffset.right) // Ensure we have enough samples
+  );
+
+  if (!isValid) {
+    console.warn('Invalid calibration values detected, resetting to zero');
+    console.log(calibrationOffset, shoulderCalibrationOffset)
+    calibrationOffset = { x: 0, y: 0, z: 0 };
+    shoulderCalibrationOffset = { left: 0, right: 0 };
+    isCalibrated = false;
+    return false;
+  }
+
+  isCalibrated = true;
+  return true;
 }
 
 function onPoseResults(results) {
@@ -248,16 +289,25 @@ function onPoseResults(results) {
 
     const shoulderAngles = calculateShoulderAngles(results.poseLandmarks);
     
-    // Emit shoulder angles
-    window.dispatchEvent(new CustomEvent('shoulderPoseUpdate', {
-      detail: shoulderAngles
-    }));
+    // Store the latest shoulder angles for calibration
+    window.lastShoulderAngles = shoulderAngles;
+    
+    if (isCalibrated) {
+      // Only emit and display values if calibration is complete
+      window.dispatchEvent(new CustomEvent('shoulderPoseUpdate', {
+        detail: shoulderAngles
+      }));
 
-    // Draw debug information for shoulders
-    canvasCtx.fillStyle = '#FFFFFF';
-    canvasCtx.font = '16px Arial';
-    canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
-    canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
+      // Draw debug information for shoulders
+      canvasCtx.fillStyle = '#FFFFFF';
+      canvasCtx.font = '16px Arial';
+      canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
+      canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
+      
+      // Add calibration offset information
+      canvasCtx.fillText(`Calibration Offset - Left: ${shoulderCalibrationOffset.left.toFixed(2)}`, 10, 180);
+      canvasCtx.fillText(`Calibration Offset - Right: ${shoulderCalibrationOffset.right.toFixed(2)}`, 10, 210);
+    }
   }
 }
 
@@ -337,35 +387,72 @@ function calculateHeadPose(landmarks) {
   // Calculate rotation angles using PnP
   const rotationAngles = solvePnP(normalizedPoints);
   
-  // Apply calibration offset
-  return {
-    x: rotationAngles.x - calibrationOffset.x,
-    y: rotationAngles.y - calibrationOffset.y,
-    z: rotationAngles.z - calibrationOffset.z
+  // Apply calibration offset with additional yaw normalization
+  const calibratedAngles = {
+    x: (rotationAngles.x - calibrationOffset.x),
+    y: -(rotationAngles.y - calibrationOffset.y) , // Reduce yaw sensitivity
+    z: -(rotationAngles.z - calibrationOffset.z)
   };
+
+  // Log the calibration process
+  console.log('Head pose calibration:', {
+    raw: rotationAngles,
+    offset: calibrationOffset,
+    calibrated: calibratedAngles
+  });
+  
+  return calibratedAngles;
 }
 
 function solvePnP(imagePoints) {
   // Simple approximation of head rotation angles
-  // This is a simplified version - you might want to use a more sophisticated PnP solver
   const nose = imagePoints[0];
   const leftEye = imagePoints[1];
   const rightEye = imagePoints[2];
+  const leftEar = imagePoints[3];
+  const rightEar = imagePoints[4];
   
   // Calculate roll (rotation around Z-axis)
   const eyeAngle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
   const roll = eyeAngle;
   
-  // Calculate yaw (rotation around Y-axis)
+  // Calculate yaw (rotation around Y-axis) using eye distance ratio
   const eyeDistance = Math.sqrt(
     Math.pow(rightEye.x - leftEye.x, 2) + 
     Math.pow(rightEye.y - leftEye.y, 2)
   );
-  const yaw = (eyeDistance - 100) / 50; // Normalized approximation
+  
+  // Calculate the distance from nose to each eye
+  const noseToLeftEye = Math.sqrt(
+    Math.pow(nose.x - leftEye.x, 2) + 
+    Math.pow(nose.y - leftEye.y, 2)
+  );
+  
+  const noseToRightEye = Math.sqrt(
+    Math.pow(nose.x - rightEye.x, 2) + 
+    Math.pow(nose.y - rightEye.y, 2)
+  );
+  
+  // Calculate the ratio of distances
+  const distanceRatio = noseToLeftEye / noseToRightEye;
+  
+  // Convert ratio to yaw angle (in radians)
+  // When ratio is 1, yaw is 0 (facing forward)
+  // When ratio is > 1, yaw is positive (turned left)
+  // When ratio is < 1, yaw is negative (turned right)
+  const yaw = Math.log(distanceRatio) * 0.5; // Scale factor to control sensitivity
   
   // Calculate pitch (rotation around X-axis)
   const noseToEyes = (leftEye.y + rightEye.y) / 2 - nose.y;
   const pitch = noseToEyes / 50; // Normalized approximation
+  
+  // Log the yaw calculation components for debugging
+  console.log('Yaw calculation:', {
+    noseToLeftEye,
+    noseToRightEye,
+    distanceRatio,
+    yaw
+  });
   
   return {
     x: pitch,    // Pitch (nodding up/down)
@@ -401,7 +488,20 @@ function onFaceMeshResults(results) {
         
         // Sample every CALIBRATION_SAMPLE_RATE ms
         if (elapsedTime % CALIBRATION_SAMPLE_RATE < 16) { // 16ms is roughly one frame
-          calibrationSamples.push(rotationAngles);
+          const rotationAngles = calculateHeadPose(landmarks);
+          // Get current shoulder angles if available
+          const shoulderAngles = window.lastShoulderAngles || { left: 0, right: 0 };
+          
+          calibrationSamples.push({
+            ...rotationAngles,
+            shoulderAngles
+          });
+          
+          console.log('Calibration sample collected:', {
+            head: rotationAngles,
+            shoulders: shoulderAngles,
+            sampleCount: calibrationSamples.length
+          });
         }
         
         // Show calibration progress
@@ -413,14 +513,22 @@ function onFaceMeshResults(results) {
         // End calibration after duration
         if (elapsedTime >= CALIBRATION_DURATION) {
           isCalibrating = false;
-          calculateCalibrationOffset();
-          canvasCtx.fillText('Calibration complete!', 10, 30);
-          setTimeout(() => {
-            canvasCtx.clearRect(0, 0, canvasElement.width, 30);
-          }, 2000);
+          const calibrationSuccess = calculateCalibrationOffset();
+          if (calibrationSuccess) {
+            canvasCtx.fillText('Calibration complete!', 10, 30);
+            setTimeout(() => {
+              canvasCtx.clearRect(0, 0, canvasElement.width, 30);
+            }, 2000);
+          } else {
+            canvasCtx.fillStyle = '#FF0000';
+            canvasCtx.fillText('Calibration failed! Please try again.', 10, 30);
+            setTimeout(() => {
+              startCalibration(); // Restart calibration
+            }, 2000);
+          }
         }
-      } else {
-        // Emit the rotation angles to be used by the 3D model
+      } else if (isCalibrated) {
+        // Only emit and display values if calibration is complete
         window.dispatchEvent(new CustomEvent('headPoseUpdate', {
           detail: rotationAngles
         }));
@@ -431,6 +539,11 @@ function onFaceMeshResults(results) {
         canvasCtx.fillText(`Pitch: ${rotationAngles.x.toFixed(2)}`, 10, 30);
         canvasCtx.fillText(`Yaw: ${rotationAngles.y.toFixed(2)}`, 10, 60);
         canvasCtx.fillText(`Roll: ${rotationAngles.z.toFixed(2)}`, 10, 90);
+      } else {
+        // Show message if not calibrated
+        canvasCtx.fillStyle = '#FF0000';
+        canvasCtx.font = '24px Arial';
+        canvasCtx.fillText('Please wait for calibration...', 10, 30);
       }
     }
   }
