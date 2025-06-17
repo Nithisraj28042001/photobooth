@@ -62,7 +62,7 @@ async function initPoseDetection() {
   canvasElement.style.width = '100%';
   canvasElement.style.height = '100%';
   canvasElement.style.zIndex = '1';
-  canvasElement.style.pointerEvents = 'none'; // Allow clicks to pass through to the Three.js canvas
+  canvasElement.style.pointerEvents = 'none';
   document.querySelector('.container').appendChild(canvasElement);
   canvasCtx = canvasElement.getContext('2d');
 
@@ -70,7 +70,14 @@ async function initPoseDetection() {
     // Initialize MediaPipe Face Mesh
     faceMeshDetector = new faceMesh.FaceMesh({
       locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1646424915/${file}`;
+        // Only load face mesh related files
+        if (!file.includes('face_mesh')) {
+          console.warn('Unexpected file request for face mesh:', file);
+          return '';
+        }
+        const baseUrl = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619';
+        console.log(`Loading face mesh file from: ${baseUrl}/${file}`);
+        return `${baseUrl}/${file}`;
       }
     });
 
@@ -84,7 +91,14 @@ async function initPoseDetection() {
     // Initialize MediaPipe Pose
     pose = new poseDetection.Pose({
       locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
+        // Only load pose related files
+        if (!file.includes('pose')) {
+          console.warn('Unexpected file request for pose:', file);
+          return '';
+        }
+        const baseUrl = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404';
+        console.log(`Loading pose file from: ${baseUrl}/${file}`);
+        return `${baseUrl}/${file}`;
       }
     });
 
@@ -97,32 +111,67 @@ async function initPoseDetection() {
       minTrackingConfidence: 0.5
     });
 
+    // Add error handlers for both detectors
     faceMeshDetector.onResults(onFaceMeshResults);
     pose.onResults(onPoseResults);
 
-    // Initialize camera
-    camera = new Camera(videoElement, {
-      onFrame: async () => {
-        try {
-          await Promise.all([
-            faceMeshDetector.send({image: videoElement}),
-            pose.send({image: videoElement})
-          ]);
-        } catch (error) {
-          console.error('Error processing frame:', error);
-        }
-      },
-      width: 1280,
-      height: 720
-    });
+    // Initialize camera with retry logic
+    let retryCount = 0;
+    const maxRetries = 3;
 
-    await camera.start();
-    console.log('Camera started successfully');
-    
-    // Start calibration after a short delay
-    setTimeout(startCalibration, 1000);
+    const initCamera = async () => {
+      try {
+        camera = new Camera(videoElement, {
+          onFrame: async () => {
+            try {
+              // Process face mesh and pose separately to handle errors independently
+              try {
+                await faceMeshDetector.send({image: videoElement});
+              } catch (faceError) {
+                console.error('Error processing face mesh:', faceError);
+              }
+              
+              try {
+                await pose.send({image: videoElement});
+              } catch (poseError) {
+                console.error('Error processing pose:', poseError);
+              }
+            } catch (error) {
+              console.error('Error processing frame:', error);
+            }
+          },
+          width: 1280,
+          height: 720
+        });
+
+        await camera.start();
+        console.log('Camera started successfully');
+        
+        // Start calibration after a short delay
+        setTimeout(startCalibration, 1000);
+      } catch (error) {
+        console.error(`Camera initialization attempt ${retryCount + 1} failed:`, error);
+        if (retryCount < maxRetries) {
+          retryCount++;
+          console.log(`Retrying camera initialization (${retryCount}/${maxRetries})...`);
+          setTimeout(initCamera, 1000); // Wait 1 second before retrying
+        } else {
+          console.error('Failed to initialize camera after multiple attempts');
+          // Show error message to user
+          canvasCtx.fillStyle = '#FF0000';
+          canvasCtx.font = '24px Arial';
+          canvasCtx.fillText('Failed to initialize camera. Please refresh the page.', 10, 30);
+        }
+      }
+    };
+
+    await initCamera();
   } catch (error) {
     console.error('Error initializing MediaPipe:', error);
+    // Show error message to user
+    canvasCtx.fillStyle = '#FF0000';
+    canvasCtx.font = '24px Arial';
+    canvasCtx.fillText('Error initializing face detection. Please refresh the page.', 10, 30);
   }
 }
 
@@ -233,6 +282,11 @@ function calculateShoulderAngles(landmarks) {
     rightElbow,
     { x: rightShoulder.x, y: rightShoulder.y - 1 } // Reference point above shoulder
   );
+
+  console.log({
+    left: leftAngle - shoulderCalibrationOffset.left,
+    right: rightAngle - shoulderCalibrationOffset.right
+  })
 
   return {
     left: leftAngle - shoulderCalibrationOffset.left,

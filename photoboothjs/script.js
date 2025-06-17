@@ -66,6 +66,7 @@ camera.position.z = 3;
 window.addEventListener('headPoseUpdate', (event) => {
   if (headBone) {
     const { x, y, z } = event.detail;
+    console.log(event.detail)
     headBone.rotation.x = -x;
     headBone.rotation.y = -y;
     headBone.rotation.z = -z;
