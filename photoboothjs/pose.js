@@ -436,16 +436,19 @@ function onPoseResults(results) {
       canvasCtx.font = '16px Arial';
       
       // Shoulder angles
+      canvasCtx.fillStyle = '#00FF00';
       canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
       canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
       
-      // Arm angles with axis labels
-      canvasCtx.fillText(`Left Arm - F/B: ${armAngles.left.x.toFixed(2)} L/R: ${armAngles.left.y.toFixed(2)} T: ${armAngles.left.z.toFixed(2)}`, 10, 180);
-      canvasCtx.fillText(`Right Arm - F/B: ${armAngles.right.x.toFixed(2)} L/R: ${armAngles.right.y.toFixed(2)} T: ${armAngles.right.z.toFixed(2)}`, 10, 210);
+      // Arm angles with axis labels and degrees
+      canvasCtx.fillStyle = '#FF00FF';
+      canvasCtx.fillText(`Left Arm - Pitch: ${armAngles.left.x.toFixed(1)}° Yaw: ${armAngles.left.y.toFixed(1)}° Roll: ${armAngles.left.z.toFixed(1)}°`, 10, 180);
+      canvasCtx.fillText(`Right Arm - Pitch: ${armAngles.right.x.toFixed(1)}° Yaw: ${armAngles.right.y.toFixed(1)}° Roll: ${armAngles.right.z.toFixed(1)}°`, 10, 210);
       
-      // Forearm angles with axis labels
-      canvasCtx.fillText(`Left Forearm - F/B: ${forearmAngles.left.x.toFixed(2)} L/R: ${forearmAngles.left.y.toFixed(2)} T: ${forearmAngles.left.z.toFixed(2)}`, 10, 240);
-      canvasCtx.fillText(`Right Forearm - F/B: ${forearmAngles.right.x.toFixed(2)} L/R: ${forearmAngles.right.y.toFixed(2)} T: ${forearmAngles.right.z.toFixed(2)}`, 10, 270);
+      // Forearm angles with axis labels and degrees
+      canvasCtx.fillStyle = '#FFFF00';
+      canvasCtx.fillText(`Left Forearm - Pitch: ${forearmAngles.left.x.toFixed(1)}° Yaw: ${forearmAngles.left.y.toFixed(1)}° Roll: ${forearmAngles.left.z.toFixed(1)}°`, 10, 240);
+      canvasCtx.fillText(`Right Forearm - Pitch: ${forearmAngles.right.x.toFixed(1)}° Yaw: ${forearmAngles.right.y.toFixed(1)}° Roll: ${forearmAngles.right.z.toFixed(1)}°`, 10, 270);
 
       // Draw angle between upper arm and forearm
       const leftElbowAngle = calculateElbowAngle(
@@ -459,8 +462,46 @@ function onPoseResults(results) {
         results.poseLandmarks[ARM_LANDMARKS.RIGHT_WRIST]
       );
       
-      canvasCtx.fillText(`Left Elbow Angle: ${leftElbowAngle.toFixed(2)}°`, 10, 300);
-      canvasCtx.fillText(`Right Elbow Angle: ${rightElbowAngle.toFixed(2)}°`, 10, 330);
+      canvasCtx.fillStyle = '#00FFFF';
+      canvasCtx.fillText(`Left Elbow Angle: ${leftElbowAngle.toFixed(1)}°`, 10, 300);
+      canvasCtx.fillText(`Right Elbow Angle: ${rightElbowAngle.toFixed(1)}°`, 10, 330);
+
+      // Add 3D position debugging with color coding
+      const leftShoulder = results.poseLandmarks[ARM_LANDMARKS.LEFT_SHOULDER];
+      const leftElbow = results.poseLandmarks[ARM_LANDMARKS.LEFT_ELBOW];
+      const leftWrist = results.poseLandmarks[ARM_LANDMARKS.LEFT_WRIST];
+      
+      canvasCtx.fillStyle = '#FF0000';
+      canvasCtx.fillText(`Left Shoulder 3D: (${leftShoulder.x.toFixed(3)}, ${leftShoulder.y.toFixed(3)}, ${leftShoulder.z.toFixed(3)})`, 10, 360);
+      canvasCtx.fillStyle = '#00FF00';
+      canvasCtx.fillText(`Left Elbow 3D: (${leftElbow.x.toFixed(3)}, ${leftElbow.y.toFixed(3)}, ${leftElbow.z.toFixed(3)})`, 10, 390);
+      canvasCtx.fillStyle = '#0000FF';
+      canvasCtx.fillText(`Left Wrist 3D: (${leftWrist.x.toFixed(3)}, ${leftWrist.y.toFixed(3)}, ${leftWrist.z.toFixed(3)})`, 10, 420);
+
+      // Add vector debugging
+      const upperArmVector = {
+        x: leftElbow.x - leftShoulder.x,
+        y: leftElbow.y - leftShoulder.y,
+        z: leftElbow.z - leftShoulder.z
+      };
+      const forearmVector = {
+        x: leftWrist.x - leftElbow.x,
+        y: leftWrist.y - leftElbow.y,
+        z: leftWrist.z - leftElbow.z
+      };
+      
+      canvasCtx.fillStyle = '#FF00FF';
+      canvasCtx.fillText(`Upper Arm Vector: (${upperArmVector.x.toFixed(3)}, ${upperArmVector.y.toFixed(3)}, ${upperArmVector.z.toFixed(3)})`, 10, 450);
+      canvasCtx.fillStyle = '#FFFF00';
+      canvasCtx.fillText(`Forearm Vector: (${forearmVector.x.toFixed(3)}, ${forearmVector.y.toFixed(3)}, ${forearmVector.z.toFixed(3)})`, 10, 480);
+
+      // Add movement direction indicators
+      canvasCtx.fillStyle = '#FFFFFF';
+      canvasCtx.font = '14px Arial';
+      canvasCtx.fillText(`Pitch: Forward/Backward | Yaw: Left/Right | Roll: Twist`, 10, 510);
+      canvasCtx.fillText(`Move your arm forward to see Pitch change`, 10, 530);
+      canvasCtx.fillText(`Swing your arm left/right to see Yaw change`, 10, 550);
+      canvasCtx.fillText(`Rotate your wrist to see Roll change`, 10, 570);
     }
   }
 }
@@ -544,8 +585,8 @@ function calculateHeadPose(landmarks) {
   // Apply calibration offset with additional yaw normalization
   const calibratedAngles = {
     x: (rotationAngles.x - calibrationOffset.x),
-    y: -(rotationAngles.y - calibrationOffset.y) , // Reduce yaw sensitivity
-    z: -(rotationAngles.z - calibrationOffset.z)
+    y: (rotationAngles.y - calibrationOffset.y) , // Reduce yaw sensitivity
+    z: (rotationAngles.z - calibrationOffset.z)
   };
 
   // Log the calibration process
@@ -663,51 +704,20 @@ function calculateArmAngles(landmarks) {
 }
 
 function calculateArmRotation(shoulder, elbow, wrist, reference) {
-  // Calculate vectors for the arm segments
+  // Calculate the upper arm vector in 3D space
   const upperArm = {
     x: elbow.x - shoulder.x,
     y: elbow.y - shoulder.y,
     z: elbow.z - shoulder.z
   };
 
-  // Calculate the reference vectors
-  const upVector = {
-    x: reference.x - shoulder.x,
-    y: reference.y - shoulder.y,
-    z: 0
+  // Calculate the forearm vector in 3D space
+  const forearm = {
+    x: wrist.x - elbow.x,
+    y: wrist.y - elbow.y,
+    z: wrist.z - elbow.z
   };
 
-  const forwardVector = {
-    x: 0,
-    y: 0,
-    z: 1
-  };
-
-  const rightVector = {
-    x: 1,
-    y: 0,
-    z: 0
-  };
-
-  // Calculate rotation angles using cross products and dot products
-  // X rotation (forward/backward) - relative to up vector
-  const xRotation = calculateAngleBetweenVectors(upperArm, upVector);
-  
-  // Y rotation (left/right) - relative to forward vector
-  const yRotation = calculateAngleBetweenVectors(upperArm, forwardVector);
-  
-  // Z rotation (twist) - relative to right vector
-  const zRotation = calculateAngleBetweenVectors(upperArm, rightVector);
-
-  // Apply scaling factors to make movements more natural
-  return {
-    x: xRotation * 1.5, // Increase forward/backward sensitivity
-    y: yRotation * 2.0, // Increase left/right sensitivity
-    z: zRotation * 1.0  // Keep twist sensitivity as is
-  };
-}
-
-function calculateAngleBetweenVectors(v1, v2) {
   // Normalize vectors
   const normalize = (v) => {
     const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
@@ -718,44 +728,45 @@ function calculateAngleBetweenVectors(v1, v2) {
     };
   };
 
-  const n1 = normalize(v1);
-  const n2 = normalize(v2);
+  const normalizedUpperArm = normalize(upperArm);
+  const normalizedForearm = normalize(forearm);
 
-  // Calculate dot product
-  const dot = n1.x * n2.x + n1.y * n2.y + n1.z * n2.z;
+  // Create reference coordinate system for the arm
+  // Similar to how head pose uses reference points
   
-  // Calculate cross product
-  const cross = {
-    x: n1.y * n2.z - n1.z * n2.y,
-    y: n1.z * n2.x - n1.x * n2.z,
-    z: n1.x * n2.y - n1.y * n2.x
+  // Forward vector (positive Z direction)
+  const forwardVector = { x: 0, y: 0, z: 1 };
+  
+  // Up vector (negative Y direction in screen space)
+  const upVector = { x: 0, y: -1, z: 0 };
+  
+  // Right vector (positive X direction)
+  const rightVector = { x: 1, y: 0, z: 0 };
+
+  // Calculate rotations relative to the reference coordinate system
+  // This is similar to how head pose calculates rotations
+  
+  // Pitch (X-axis rotation) - forward/backward movement
+  // Calculate angle between upper arm and the vertical plane (up vector)
+  const pitch = Math.asin(normalizedUpperArm.y);
+  
+  // Yaw (Y-axis rotation) - left/right movement  
+  // Calculate horizontal angle of upper arm relative to forward direction
+  const yaw = Math.atan2(normalizedUpperArm.x, normalizedUpperArm.z);
+  
+  // Roll (Z-axis rotation) - twist
+  // Calculate twist by comparing forearm orientation to upper arm
+  const roll = Math.atan2(
+    normalizedForearm.x * normalizedUpperArm.y - normalizedForearm.y * normalizedUpperArm.x,
+    normalizedForearm.z * normalizedUpperArm.y - normalizedForearm.y * normalizedUpperArm.z
+  );
+
+  // Convert to degrees and apply scaling
+  return {
+    x: pitch * (180 / Math.PI) * 1.0,  // Pitch sensitivity
+    y: yaw * (180 / Math.PI) * 1.0,    // Yaw sensitivity  
+    z: roll * (180 / Math.PI) * 0.5    // Roll sensitivity (reduced)
   };
-
-  // Calculate angle
-  const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
-
-  // Determine direction using cross product
-  const direction = cross.z > 0 ? 1 : -1;
-
-  // Apply direction and convert to degrees for easier debugging
-  const angleInDegrees = angle * (180 / Math.PI) * direction;
-
-  // Log detailed angle calculation for debugging
-  console.log('Angle calculation:', {
-    vectors: {
-      v1: { x: v1.x.toFixed(3), y: v1.y.toFixed(3), z: v1.z.toFixed(3) },
-      v2: { x: v2.x.toFixed(3), y: v2.y.toFixed(3), z: v2.z.toFixed(3) }
-    },
-    normalized: {
-      n1: { x: n1.x.toFixed(3), y: n1.y.toFixed(3), z: n1.z.toFixed(3) },
-      n2: { x: n2.x.toFixed(3), y: n2.y.toFixed(3), z: n2.z.toFixed(3) }
-    },
-    dot: dot.toFixed(3),
-    cross: { x: cross.x.toFixed(3), y: cross.y.toFixed(3), z: cross.z.toFixed(3) },
-    angle: angleInDegrees.toFixed(3)
-  });
-
-  return angleInDegrees * (Math.PI / 180); // Convert back to radians
 }
 
 function calculateForearmAngles(landmarks) {
@@ -802,47 +813,50 @@ function calculateForearmAngles(landmarks) {
 }
 
 function calculateForearmRotation(elbow, wrist, reference) {
-  // Calculate forearm vector
+  // Calculate the forearm vector in 3D space
   const forearm = {
     x: wrist.x - elbow.x,
     y: wrist.y - elbow.y,
     z: wrist.z - elbow.z
   };
 
-  // Calculate the reference vectors
-  const upVector = {
-    x: reference.x - elbow.x,
-    y: reference.y - elbow.y,
-    z: 0
+  // Normalize the forearm vector
+  const normalize = (v) => {
+    const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return {
+      x: v.x / length,
+      y: v.y / length,
+      z: v.z / length
+    };
   };
 
-  const forwardVector = {
-    x: 0,
-    y: 0,
-    z: 1
-  };
+  const normalizedForearm = normalize(forearm);
 
-  const rightVector = {
-    x: 1,
-    y: 0,
-    z: 0
-  };
-
-  // Calculate rotation angles using cross products and dot products
-  // X rotation (forward/backward) - relative to up vector
-  const xRotation = calculateAngleBetweenVectors(forearm, upVector);
+  // Create reference coordinate system for the forearm
+  // Forward vector (positive Z direction)
+  const forwardVector = { x: 0, y: 0, z: 1 };
   
-  // Y rotation (left/right) - relative to forward vector
-  const yRotation = calculateAngleBetweenVectors(forearm, forwardVector);
+  // Up vector (negative Y direction in screen space)
+  const upVector = { x: 0, y: -1, z: 0 };
   
-  // Z rotation (twist) - relative to right vector
-  const zRotation = calculateAngleBetweenVectors(forearm, rightVector);
+  // Right vector (positive X direction)
+  const rightVector = { x: 1, y: 0, z: 0 };
 
-  // Apply scaling factors to make movements more natural
+  // Calculate rotations relative to the reference coordinate system
+  // Pitch (X-axis rotation) - forward/backward movement
+  const pitch = Math.asin(normalizedForearm.y);
+  
+  // Yaw (Y-axis rotation) - left/right movement
+  const yaw = Math.atan2(normalizedForearm.x, normalizedForearm.z);
+  
+  // Roll (Z-axis rotation) - twist
+  const roll = Math.atan2(normalizedForearm.x, normalizedForearm.y);
+
+  // Convert to degrees and apply scaling
   return {
-    x: xRotation * 1.5, // Increase forward/backward sensitivity
-    y: yRotation * 2.0, // Increase left/right sensitivity
-    z: zRotation * 1.0  // Keep twist sensitivity as is
+    x: pitch * (180 / Math.PI) * 1.0,  // Pitch sensitivity
+    y: yaw * (180 / Math.PI) * 1.0,    // Yaw sensitivity
+    z: roll * (180 / Math.PI) * 0.5    // Roll sensitivity (reduced)
   };
 }
 
@@ -938,7 +952,7 @@ function onFaceMeshResults(results) {
   }
 }
 
-// Add function to calculate elbow angle
+// Add a function to calculate the angle between upper arm and forearm more accurately
 function calculateElbowAngle(shoulder, elbow, wrist) {
   // Calculate vectors
   const upperArm = {
