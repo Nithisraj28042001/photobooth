@@ -106,9 +106,9 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
 
   if (spine) {
 
-    // spine.rotation.x = torso.x;
-    // spine.rotation.y = torso.z;
-    spine.rotation.z = -torso.z;
+    spine.rotation.x = torso.x * 2; // this goes for the front and back shift
+    // spine.rotation.y = torso.y;
+    spine.rotation.z = -torso.z; //this goes left and right
   }
 
   // if(leftArmBone && rightArmBone) {
