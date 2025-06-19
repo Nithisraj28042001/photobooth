@@ -27,6 +27,9 @@ const light = new THREE.DirectionalLight(0xffffff, 0.8);
 light.position.set(1, 1, 1);
 scene.add(light);
 
+
+// bones
+
 let headBone = null;
 let leftShoulderBone = null;
 let rightShoulderBone = null;
@@ -34,8 +37,7 @@ let leftArmBone = null;
 let rightArmBone = null;
 let leftForearmBone = null;
 let rightForearmBone = null;
-let leftHandBone = null;
-let rightHandBone = null;
+let spine = null;
 
 // Load GLB model
 const loader = new GLTFLoader();
@@ -48,35 +50,27 @@ loader.load('models/demo.glb', (gltf) => {
   // Find the bones
   model.traverse((obj) => {
     if (obj.isBone) {
-      const boneName = obj.name.toLowerCase();
-      if (boneName.includes('head')) {
+      if (obj.name.toLowerCase().includes('head')) {
         headBone = obj;
         console.log("Found head bone:", obj.name);
-      } else if (boneName.includes('shoulderl') || boneName.includes('shoulder_l')) {
+      } else if (obj.name.toLowerCase().includes('shoulderl')) {
         leftShoulderBone = obj;
         console.log("Found left shoulder bone:", obj.name);
-      } else if (boneName.includes('shoulderr') || boneName.includes('shoulder_r')) {
+      } else if (obj.name.toLowerCase().includes('shoulderr')) {
         rightShoulderBone = obj;
         console.log("Found right shoulder bone:", obj.name);
-      } else if (boneName.includes('upperarml') || boneName.includes('upper_arm_l') || boneName.includes('arml')) {
+      } else if (obj.name.toLowerCase().includes('upper_arml')) {
         leftArmBone = obj;
-        console.log("Found left arm bone:", obj.name);
-      } else if (boneName.includes('upperarmr') || boneName.includes('upper_arm_r') || boneName.includes('armr')) {
+        console.log("Found left Upper Arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('upper_armr')) {
         rightArmBone = obj;
-        console.log("Found right arm bone:", obj.name);
-      } else if (boneName.includes('forearml') || boneName.includes('lower_arm_l')) {
-        leftForearmBone = obj;
-        console.log("Found left forearm bone:", obj.name);
-      } else if (boneName.includes('forearmr') || boneName.includes('lower_arm_r')) {
-        rightForearmBone = obj;
-        console.log("Found right forearm bone:", obj.name);
-      } else if (boneName.includes('handl') || boneName.includes('hand_l')) {
-        leftHandBone = obj;
-        console.log("Found left hand bone:", obj.name);
-      } else if (boneName.includes('handr') || boneName.includes('hand_r')) {
-        rightHandBone = obj;
-        console.log("Found right hand bone:", obj.name);
+        console.log("Found right Upper Arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('spine2')) {
+        spine = obj;
+        console.log("Found Spine:", obj.name);
       }
+      
+      
     }
   });
 
@@ -87,91 +81,46 @@ loader.load('models/demo.glb', (gltf) => {
 // Camera position
 camera.position.z = 3;
 
-// Helper function to convert degrees to radians
 function degToRad(degrees) {
   return degrees * (Math.PI / 180);
 }
 
-// Listen for head pose updates
-window.addEventListener('headPoseUpdate', (event) => {
+window.addEventListener('unifiedPoseUpdate', (event) => {
+  const { head, shoulders, arms, forearms, torso } = event.detail;
+  console.log('Unified pose update received:', event.detail);
+  
+  setTimeout(()=>{
+    console.log("Waited");
+  },30000)
+    
   if (headBone) {
-    const { x, y, z } = event.detail;
-    console.log('Head pose update:', event.detail);
-    headBone.rotation.x = -degToRad(x);
-    headBone.rotation.y = -degToRad(y);
-    headBone.rotation.z = -degToRad(z);
+    headBone.rotation.x = -head.x;
+    headBone.rotation.y = -head.y;
+    headBone.rotation.z = -head.z;
   }
-});
 
-// Listen for shoulder pose updates
-window.addEventListener('shoulderPoseUpdate', (event) => {
-  const { left, right } = event.detail;
-  console.log('Shoulder pose update:', event.detail);
-  
-  if (leftShoulderBone) {
-    // Apply shoulder rotation - adjust axis and multiplier as needed
-    leftShoulderBone.rotation.y = degToRad(left * 2);
+  if (leftShoulderBone && rightShoulderBone) {
+    leftShoulderBone.rotation.y = shoulders.left * 2;
+    rightShoulderBone.rotation.y = shoulders.right * 2 ;
   }
-  
-  if (rightShoulderBone) {
-    rightShoulderBone.rotation.y = degToRad(right * 2);
-  }
-});
 
-// Listen for arm pose updates
-window.addEventListener('armPoseUpdate', (event) => {
-  const { left, right } = event.detail;
-  console.log('Arm pose update:', event.detail);
-  
-  if (leftArmBone) {
-    // Apply arm rotations (Pitch, Yaw, Roll)
-    leftArmBone.rotation.x = degToRad(left.x);
-    leftArmBone.rotation.y = degToRad(left.y);
-    leftArmBone.rotation.z = degToRad(left.z);
-  }
-  
-  if (rightArmBone) {
-    rightArmBone.rotation.x = degToRad(right.x);
-    rightArmBone.rotation.y = degToRad(right.y);
-    rightArmBone.rotation.z = degToRad(right.z);
-  }
-});
+  if (spine) {
 
-// Listen for forearm pose updates
-window.addEventListener('forearmPoseUpdate', (event) => {
-  const { left, right } = event.detail;
-  console.log('Forearm pose update:', event.detail);
-  
-  if (leftForearmBone) {
-    leftForearmBone.rotation.x = -degToRad(left.x);
-    leftForearmBone.rotation.y = degToRad(left.y);
-    leftForearmBone.rotation.z = degToRad(left.z);
+    // spine.rotation.x = torso.x;
+    // spine.rotation.y = torso.z;
+    spine.rotation.z = -torso.z;
   }
-  
-  if (rightForearmBone) {
-    rightForearmBone.rotation.x = -degToRad(right.x);
-    rightForearmBone.rotation.y = degToRad(right.y);
-    rightForearmBone.rotation.z = degToRad(right.z);
-  }
-});
 
-// Listen for hand pose updates (if available)
-window.addEventListener('handPoseUpdate', (event) => {
-  const { left, right } = event.detail;
-  console.log('Hand pose update:', event.detail);
-  
-  if (leftHandBone) {
-    // Apply hand rotations
-    leftHandBone.rotation.x = degToRad(left.x);
-    leftHandBone.rotation.y = degToRad(left.y);
-    leftHandBone.rotation.z = degToRad(left.z);
-  }
-  
-  if (rightHandBone) {
-    rightHandBone.rotation.x = degToRad(right.x);
-    rightHandBone.rotation.y = degToRad(right.y);
-    rightHandBone.rotation.z = degToRad(right.z);
-  }
+  // if(leftArmBone && rightArmBone) {
+  //   leftArmBone.rotation.x = degToRad(arms.left.x);
+  //   leftArmBone.rotation.y = degToRad(arms.left.y);
+  //   leftArmBone.rotation.z = degToRad(arms.left.z);
+
+  //   rightArmBone.rotation.x = degToRad(arms.right.x);
+  //   rightArmBone.rotation.y = degToRad(arms.right.y);
+  //   rightArmBone.rotation.z = degToRad(arms.right.z);
+  // }
+
 });
 
 // Animate

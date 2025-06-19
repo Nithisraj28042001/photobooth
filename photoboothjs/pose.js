@@ -16,7 +16,7 @@ let calibrationSamples = [];
 let calibrationOffset = { x: 0, y: 0, z: 0 };
 let shoulderCalibrationOffset = { left: 0, right: 0 };
 let calibrationStartTime = null;
-const CALIBRATION_DURATION = 3000; // 3 seconds
+const CALIBRATION_DURATION = 5000; // 5 seconds for better accuracy
 const CALIBRATION_SAMPLE_RATE = 100; // Sample every 100ms
 let isCalibrated = false;
 
@@ -62,11 +62,22 @@ const ARM_LANDMARKS = {
   RIGHT_WRIST: 16
 };
 
+// Add torso landmarks
+const TORSO_LANDMARKS = {
+  LEFT_SHOULDER: 11,
+  RIGHT_SHOULDER: 12,
+  LEFT_HIP: 23,
+  RIGHT_HIP: 24
+};
+
 // Add these variables with other calibration variables
 let armCalibrationOffset = {
   left: { x: 0, y: 0, z: 0 },
   right: { x: 0, y: 0, z: 0 }
 };
+
+// Add torso calibration offset
+let torsoCalibrationOffset = { x: 0, y: 0, z: 0 };
 
 // Add these variables with other calibration variables
 let forearmCalibrationOffset = {
@@ -74,19 +85,41 @@ let forearmCalibrationOffset = {
   right: { x: 0, y: 0, z: 0 }
 };
 
+// Add these variables at the top with other variables
+let debugInfo = {
+  head: { x: 0, y: 0, z: 0 },
+  torso: { x: 0, y: 0, z: 0 },
+  shoulders: { left: 0, right: 0 },
+  arms: { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+  forearms: { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+  elbowAngles: { left: 0, right: 0 },
+  shoulder3D: { x: 0, y: 0, z: 0 },
+  elbow3D: { x: 0, y: 0, z: 0 },
+  wrist3D: { x: 0, y: 0, z: 0 },
+  upperArmVector: { x: 0, y: 0, z: 0 },
+  forearmVector: { x: 0, y: 0, z: 0 }
+};
+
+let lastFrameTime = 0;
+const FRAME_RATE = 30; // 30 FPS for debug updates
+
 async function initPoseDetection() {
   videoElement = document.getElementById('webcam');
+  
+  // Create a separate debug canvas that overlays the video
   canvasElement = document.createElement('canvas');
   
-  // Style the canvas to overlay the video
+  // Style the canvas to overlay the video but not interfere with 3D canvas
   canvasElement.style.position = 'absolute';
   canvasElement.style.top = '0';
   canvasElement.style.left = '0';
   canvasElement.style.width = '100%';
   canvasElement.style.height = '100%';
-  canvasElement.style.zIndex = '1';
+  canvasElement.style.zIndex = '1'; // Higher than 3D canvas
   canvasElement.style.pointerEvents = 'none';
+  canvasElement.id = 'debug-canvas'; // Give it a unique ID
   document.querySelector('.container').appendChild(canvasElement);
+  
   canvasCtx = canvasElement.getContext('2d');
 
   try {
@@ -99,7 +132,7 @@ async function initPoseDetection() {
           return '';
         }
         const baseUrl = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619';
-        console.log(`Loading face mesh file from: ${baseUrl}/${file}`);
+        //console.log(`Loading face mesh file from: ${baseUrl}/${file}`);
         return `${baseUrl}/${file}`;
       }
     });
@@ -120,7 +153,7 @@ async function initPoseDetection() {
           return '';
         }
         const baseUrl = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404';
-        console.log(`Loading pose file from: ${baseUrl}/${file}`);
+        //console.log(`Loading pose file from: ${baseUrl}/${file}`);
         return `${baseUrl}/${file}`;
       }
     });
@@ -168,7 +201,7 @@ async function initPoseDetection() {
         });
 
         await camera.start();
-        console.log('Camera started successfully');
+        //console.log('Camera started successfully');
         
         // Start calibration after a short delay
         setTimeout(startCalibration, 1000);
@@ -176,7 +209,7 @@ async function initPoseDetection() {
         console.error(`Camera initialization attempt ${retryCount + 1} failed:`, error);
         if (retryCount < maxRetries) {
           retryCount++;
-          console.log(`Retrying camera initialization (${retryCount}/${maxRetries})...`);
+          //console.log(`Retrying camera initialization (${retryCount}/${maxRetries})...`);
           setTimeout(initCamera, 1000); // Wait 1 second before retrying
         } else {
           console.error('Failed to initialize camera after multiple attempts');
@@ -203,12 +236,17 @@ function startCalibration() {
   calibrationSamples = [];
   calibrationStartTime = Date.now();
   
-  // Show calibration message
+  // Show comprehensive calibration message
   canvasCtx.fillStyle = '#FFFFFF';
-  canvasCtx.font = '24px Arial';
-  canvasCtx.fillText('Please face the camera straight and keep shoulders level for 3 seconds...', 10, 30);
+  canvasCtx.font = '20px Arial';
+  canvasCtx.fillText('Calibration starting in 5 seconds...', 10, 30);
+  canvasCtx.fillText('Please:', 10, 60);
+  canvasCtx.fillText('• Face the camera straight ahead', 10, 90);
+  canvasCtx.fillText('• Keep your torso upright and centered', 10, 120);
+  canvasCtx.fillText('• Keep shoulders level and relaxed', 10, 150);
+  canvasCtx.fillText('• Stay still during calibration', 10, 180);
   
-  console.log('Starting calibration...');
+  //console.log('Starting calibration...');
 }
 
 function calculateCalibrationOffset() {
@@ -217,7 +255,7 @@ function calculateCalibrationOffset() {
     return false;
   }
 
-  console.log('Calculating calibration offset from', calibrationSamples.length, 'samples');
+  //console.log('Calculating calibration offset from', calibrationSamples.length, 'samples');
 
   // Calculate head pose calibration offset (existing code)
   const sum = calibrationSamples.reduce((acc, sample) => ({
@@ -297,42 +335,71 @@ function calculateCalibrationOffset() {
     }
   };
 
+  // Calculate torso calibration offset
+  const torsoSum = calibrationSamples.reduce((acc, sample) => ({
+    x: acc.x + (sample.torsoAngles?.x || 0),
+    y: acc.y + (sample.torsoAngles?.y || 0),
+    z: acc.z + (sample.torsoAngles?.z || 0)
+  }), { x: 0, y: 0, z: 0 });
+
+  torsoCalibrationOffset = {
+    x: torsoSum.x / calibrationSamples.length,
+    y: torsoSum.y / calibrationSamples.length,
+    z: torsoSum.z / calibrationSamples.length
+  };
+
   // Log detailed calibration results
-  console.log('Calibration complete:', {
-    headOffset: {
-      x: calibrationOffset.x.toFixed(3),
-      y: calibrationOffset.y.toFixed(3),
-      z: calibrationOffset.z.toFixed(3)
+  //console.log('Calibration complete:', {
+  //   headOffset: {
+  //     x: calibrationOffset.x.toFixed(3),
+  //     y: calibrationOffset.y.toFixed(3),
+  //     z: calibrationOffset.z.toFixed(3)
+  //   },
+  //   shoulderOffset: {
+  //     left: shoulderCalibrationOffset.left.toFixed(3),
+  //     right: shoulderCalibrationOffset.right.toFixed(3)
+  //   },
+  //   armOffset: {
+  //     left: {
+  //       x: armCalibrationOffset.left.x.toFixed(3),
+  //       y: armCalibrationOffset.left.y.toFixed(3),
+  //       z: armCalibrationOffset.left.z.toFixed(3)
+  //     },
+  //     right: {
+  //       x: armCalibrationOffset.right.x.toFixed(3),
+  //       y: armCalibrationOffset.right.y.toFixed(3),
+  //       z: armCalibrationOffset.right.z.toFixed(3)
+  //     }
+  //   },
+  //   forearmOffset: {
+  //     left: {
+  //       x: forearmCalibrationOffset.left.x.toFixed(3),
+  //       y: forearmCalibrationOffset.left.y.toFixed(3),
+  //       z: forearmCalibrationOffset.left.z.toFixed(3)
+  //     },
+  //     right: {
+  //       x: forearmCalibrationOffset.right.x.toFixed(3),
+  //       y: forearmCalibrationOffset.right.y.toFixed(3),
+  //       z: forearmCalibrationOffset.right.z.toFixed(3)
+  //     }
+  //   },
+  //   torsoOffset: {
+  //     x: torsoCalibrationOffset.x.toFixed(3),
+  //     y: torsoCalibrationOffset.y.toFixed(3),
+  //     z: torsoCalibrationOffset.z.toFixed(3)
+  //   },
+  //   sampleCount: calibrationSamples.length
+  // });
+
+  // Log torso calibration specifically for debugging
+  console.log('Torso calibration complete:', {
+    offset: {
+      x: torsoCalibrationOffset.x.toFixed(3),
+      y: torsoCalibrationOffset.y.toFixed(3),
+      z: torsoCalibrationOffset.z.toFixed(3)
     },
-    shoulderOffset: {
-      left: shoulderCalibrationOffset.left.toFixed(3),
-      right: shoulderCalibrationOffset.right.toFixed(3)
-    },
-    armOffset: {
-      left: {
-        x: armCalibrationOffset.left.x.toFixed(3),
-        y: armCalibrationOffset.left.y.toFixed(3),
-        z: armCalibrationOffset.left.z.toFixed(3)
-      },
-      right: {
-        x: armCalibrationOffset.right.x.toFixed(3),
-        y: armCalibrationOffset.right.y.toFixed(3),
-        z: armCalibrationOffset.right.z.toFixed(3)
-      }
-    },
-    forearmOffset: {
-      left: {
-        x: forearmCalibrationOffset.left.x.toFixed(3),
-        y: forearmCalibrationOffset.left.y.toFixed(3),
-        z: forearmCalibrationOffset.left.z.toFixed(3)
-      },
-      right: {
-        x: forearmCalibrationOffset.right.x.toFixed(3),
-        y: forearmCalibrationOffset.right.y.toFixed(3),
-        z: forearmCalibrationOffset.right.z.toFixed(3)
-      }
-    },
-    sampleCount: calibrationSamples.length
+    sampleCount: calibrationSamples.length,
+    averageSamplesPerSecond: (calibrationSamples.length / (CALIBRATION_DURATION / 1000)).toFixed(1)
   });
 
   // Validate calibration results
@@ -353,7 +420,10 @@ function calculateCalibrationOffset() {
     !isNaN(forearmCalibrationOffset.left.z) &&
     !isNaN(forearmCalibrationOffset.right.x) &&
     !isNaN(forearmCalibrationOffset.right.y) &&
-    !isNaN(forearmCalibrationOffset.right.z)
+    !isNaN(forearmCalibrationOffset.right.z) &&
+    !isNaN(torsoCalibrationOffset.x) &&
+    !isNaN(torsoCalibrationOffset.y) &&
+    !isNaN(torsoCalibrationOffset.z)
   );
 
   if (!isValid) {
@@ -368,6 +438,7 @@ function calculateCalibrationOffset() {
       left: { x: 0, y: 0, z: 0 },
       right: { x: 0, y: 0, z: 0 }
     };
+    torsoCalibrationOffset = { x: 0, y: 0, z: 0 };
     isCalibrated = false;
     return false;
   }
@@ -378,14 +449,13 @@ function calculateCalibrationOffset() {
 
 function onPoseResults(results) {
   // Set canvas dimensions to match video
-  canvasElement.width = videoElement.videoWidth;
-  canvasElement.height = videoElement.videoHeight;
+  if (videoElement.videoWidth && videoElement.videoHeight) {
+    canvasElement.width = videoElement.videoWidth;
+    canvasElement.height = videoElement.videoHeight;
+  }
   
-  // Clear canvas
+  // Clear canvas every frame to ensure clean drawing
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-  
-  // Draw video frame
-  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
   // Draw pose landmarks
   if (results.poseLandmarks) {
@@ -396,6 +466,9 @@ function onPoseResults(results) {
     // Draw landmarks
     drawLandmarks(canvasCtx, results.poseLandmarks,
       {color: '#FF0000', lineWidth: 1, radius: 3});
+
+    // Draw torso landmarks specifically with different colors
+    drawTorsoLandmarks(results.poseLandmarks);
 
     // Optional: Add text labels for key points
     results.poseLandmarks.forEach((landmark, index) => {
@@ -409,48 +482,22 @@ function onPoseResults(results) {
     const shoulderAngles = calculateShoulderAngles(results.poseLandmarks);
     const armAngles = calculateArmAngles(results.poseLandmarks);
     const forearmAngles = calculateForearmAngles(results.poseLandmarks);
+    const torsoAngles = calculateTorsoAngles(results.poseLandmarks);
     
     // Store the latest angles for calibration
     window.lastShoulderAngles = shoulderAngles;
     window.lastArmAngles = armAngles;
     window.lastForearmAngles = forearmAngles;
+    window.lastTorsoAngles = torsoAngles;
     
     if (isCalibrated) {
-      // Emit shoulder angles
-      window.dispatchEvent(new CustomEvent('shoulderPoseUpdate', {
-        detail: shoulderAngles
-      }));
+      // Update debug info
+      debugInfo.shoulders = shoulderAngles;
+      debugInfo.arms = armAngles;
+      debugInfo.forearms = forearmAngles;
+      debugInfo.torso = torsoAngles;
 
-      // Emit arm angles
-      window.dispatchEvent(new CustomEvent('armPoseUpdate', {
-        detail: armAngles
-      }));
-
-      // Emit forearm angles
-      window.dispatchEvent(new CustomEvent('forearmPoseUpdate', {
-        detail: forearmAngles
-      }));
-
-      // Draw debug information with more detail
-      canvasCtx.fillStyle = '#FFFFFF';
-      canvasCtx.font = '16px Arial';
-      
-      // Shoulder angles
-      canvasCtx.fillStyle = '#00FF00';
-      canvasCtx.fillText(`Left Shoulder: ${shoulderAngles.left.toFixed(2)}`, 10, 120);
-      canvasCtx.fillText(`Right Shoulder: ${shoulderAngles.right.toFixed(2)}`, 10, 150);
-      
-      // Arm angles with axis labels and degrees
-      canvasCtx.fillStyle = '#FF00FF';
-      canvasCtx.fillText(`Left Arm - Pitch: ${armAngles.left.x.toFixed(1)}° Yaw: ${armAngles.left.y.toFixed(1)}° Roll: ${armAngles.left.z.toFixed(1)}°`, 10, 180);
-      canvasCtx.fillText(`Right Arm - Pitch: ${armAngles.right.x.toFixed(1)}° Yaw: ${armAngles.right.y.toFixed(1)}° Roll: ${armAngles.right.z.toFixed(1)}°`, 10, 210);
-      
-      // Forearm angles with axis labels and degrees
-      canvasCtx.fillStyle = '#FFFF00';
-      canvasCtx.fillText(`Left Forearm - Pitch: ${forearmAngles.left.x.toFixed(1)}° Yaw: ${forearmAngles.left.y.toFixed(1)}° Roll: ${forearmAngles.left.z.toFixed(1)}°`, 10, 240);
-      canvasCtx.fillText(`Right Forearm - Pitch: ${forearmAngles.right.x.toFixed(1)}° Yaw: ${forearmAngles.right.y.toFixed(1)}° Roll: ${forearmAngles.right.z.toFixed(1)}°`, 10, 270);
-
-      // Draw angle between upper arm and forearm
+      // Calculate elbow angles
       const leftElbowAngle = calculateElbowAngle(
         results.poseLandmarks[ARM_LANDMARKS.LEFT_SHOULDER],
         results.poseLandmarks[ARM_LANDMARKS.LEFT_ELBOW],
@@ -462,46 +509,45 @@ function onPoseResults(results) {
         results.poseLandmarks[ARM_LANDMARKS.RIGHT_WRIST]
       );
       
-      canvasCtx.fillStyle = '#00FFFF';
-      canvasCtx.fillText(`Left Elbow Angle: ${leftElbowAngle.toFixed(1)}°`, 10, 300);
-      canvasCtx.fillText(`Right Elbow Angle: ${rightElbowAngle.toFixed(1)}°`, 10, 330);
+      debugInfo.elbowAngles = { left: leftElbowAngle, right: rightElbowAngle };
 
-      // Add 3D position debugging with color coding
+      // Update 3D position debugging
       const leftShoulder = results.poseLandmarks[ARM_LANDMARKS.LEFT_SHOULDER];
       const leftElbow = results.poseLandmarks[ARM_LANDMARKS.LEFT_ELBOW];
       const leftWrist = results.poseLandmarks[ARM_LANDMARKS.LEFT_WRIST];
       
-      canvasCtx.fillStyle = '#FF0000';
-      canvasCtx.fillText(`Left Shoulder 3D: (${leftShoulder.x.toFixed(3)}, ${leftShoulder.y.toFixed(3)}, ${leftShoulder.z.toFixed(3)})`, 10, 360);
-      canvasCtx.fillStyle = '#00FF00';
-      canvasCtx.fillText(`Left Elbow 3D: (${leftElbow.x.toFixed(3)}, ${leftElbow.y.toFixed(3)}, ${leftElbow.z.toFixed(3)})`, 10, 390);
-      canvasCtx.fillStyle = '#0000FF';
-      canvasCtx.fillText(`Left Wrist 3D: (${leftWrist.x.toFixed(3)}, ${leftWrist.y.toFixed(3)}, ${leftWrist.z.toFixed(3)})`, 10, 420);
+      debugInfo.shoulder3D = leftShoulder;
+      debugInfo.elbow3D = leftElbow;
+      debugInfo.wrist3D = leftWrist;
 
-      // Add vector debugging
-      const upperArmVector = {
+      // Update vector debugging
+      debugInfo.upperArmVector = {
         x: leftElbow.x - leftShoulder.x,
         y: leftElbow.y - leftShoulder.y,
         z: leftElbow.z - leftShoulder.z
       };
-      const forearmVector = {
+      debugInfo.forearmVector = {
         x: leftWrist.x - leftElbow.x,
         y: leftWrist.y - leftElbow.y,
         z: leftWrist.z - leftElbow.z
       };
-      
-      canvasCtx.fillStyle = '#FF00FF';
-      canvasCtx.fillText(`Upper Arm Vector: (${upperArmVector.x.toFixed(3)}, ${upperArmVector.y.toFixed(3)}, ${upperArmVector.z.toFixed(3)})`, 10, 450);
-      canvasCtx.fillStyle = '#FFFF00';
-      canvasCtx.fillText(`Forearm Vector: (${forearmVector.x.toFixed(3)}, ${forearmVector.y.toFixed(3)}, ${forearmVector.z.toFixed(3)})`, 10, 480);
 
-      // Add movement direction indicators
-      canvasCtx.fillStyle = '#FFFFFF';
-      canvasCtx.font = '14px Arial';
-      canvasCtx.fillText(`Pitch: Forward/Backward | Yaw: Left/Right | Roll: Twist`, 10, 510);
-      canvasCtx.fillText(`Move your arm forward to see Pitch change`, 10, 530);
-      canvasCtx.fillText(`Swing your arm left/right to see Yaw change`, 10, 550);
-      canvasCtx.fillText(`Rotate your wrist to see Roll change`, 10, 570);
+      // Create unified pose data object
+      const unifiedPoseData = {
+        head: window.lastHeadPose || { x: 0, y: 0, z: 0 },
+        shoulders: shoulderAngles,
+        arms: armAngles,
+        forearms: forearmAngles,
+        torso: torsoAngles
+      };
+
+      // Dispatch unified pose update event
+      window.dispatchEvent(new CustomEvent('unifiedPoseUpdate', {
+        detail: unifiedPoseData
+      }));
+
+      // Draw all debug information
+      drawDebugInfo();
     }
   }
 }
@@ -528,10 +574,10 @@ function calculateShoulderAngles(landmarks) {
     { x: rightShoulder.x, y: rightShoulder.y - 1 } // Reference point above shoulder
   );
 
-  console.log({
-    left: leftAngle - shoulderCalibrationOffset.left,
-    right: rightAngle - shoulderCalibrationOffset.right
-  })
+  //console.log({
+  //   left: leftAngle - shoulderCalibrationOffset.left,
+  //   right: rightAngle - shoulderCalibrationOffset.right
+  // })
 
   return {
     left: leftAngle - shoulderCalibrationOffset.left,
@@ -590,11 +636,11 @@ function calculateHeadPose(landmarks) {
   };
 
   // Log the calibration process
-  console.log('Head pose calibration:', {
-    raw: rotationAngles,
-    offset: calibrationOffset,
-    calibrated: calibratedAngles
-  });
+  //console.log('Head pose calibration:', {
+  //   raw: rotationAngles,
+  //   offset: calibrationOffset,
+  //   calibrated: calibratedAngles
+  // });
   
   return calibratedAngles;
 }
@@ -642,12 +688,12 @@ function solvePnP(imagePoints) {
   const pitch = noseToEyes / 50; // Normalized approximation
   
   // Log the yaw calculation components for debugging
-  console.log('Yaw calculation:', {
-    noseToLeftEye,
-    noseToRightEye,
-    distanceRatio,
-    yaw
-  });
+  //console.log('Yaw calculation:', {
+  //   noseToLeftEye,
+  //   noseToRightEye,
+  //   distanceRatio,
+  //   yaw
+  // });
   
   return {
     x: pitch,    // Pitch (nodding up/down)
@@ -698,7 +744,7 @@ function calculateArmAngles(landmarks) {
   };
 
   // Log arm angles for debugging
-  console.log('Arm angles:', calibratedAngles);
+  //console.log('Arm angles:', calibratedAngles);
 
   return calibratedAngles;
 }
@@ -807,7 +853,7 @@ function calculateForearmAngles(landmarks) {
   };
 
   // Log forearm angles for debugging
-  console.log('Forearm angles:', calibratedAngles);
+  //console.log('Forearm angles:', calibratedAngles);
 
   return calibratedAngles;
 }
@@ -860,16 +906,132 @@ function calculateForearmRotation(elbow, wrist, reference) {
   };
 }
 
+function calculateTorsoAngles(landmarks) {
+  if (!landmarks) return { x: 0, y: 0, z: 0 };
+
+  // Get relevant landmarks
+  const leftShoulder = landmarks[TORSO_LANDMARKS.LEFT_SHOULDER];
+  const rightShoulder = landmarks[TORSO_LANDMARKS.RIGHT_SHOULDER];
+  const leftHip = landmarks[TORSO_LANDMARKS.LEFT_HIP];
+  const rightHip = landmarks[TORSO_LANDMARKS.RIGHT_HIP];
+
+  // Validate that all landmarks are present and have reasonable values
+  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  // Additional validation: check if landmarks have valid coordinates
+  const isValidLandmark = (landmark) => {
+    return landmark && 
+           typeof landmark.x === 'number' && 
+           typeof landmark.y === 'number' && 
+           typeof landmark.z === 'number' &&
+           !isNaN(landmark.x) && !isNaN(landmark.y) && !isNaN(landmark.z);
+  };
+
+  if (!isValidLandmark(leftShoulder) || !isValidLandmark(rightShoulder) || 
+      !isValidLandmark(leftHip) || !isValidLandmark(rightHip)) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  // Calculate torso center points
+  const shoulderCenter = {
+    x: (leftShoulder.x + rightShoulder.x) / 2,
+    y: (leftShoulder.y + rightShoulder.y) / 2,
+    z: (leftShoulder.z + rightShoulder.z) / 2
+  };
+
+  const hipCenter = {
+    x: (leftHip.x + rightHip.x) / 2,
+    y: (leftHip.y + rightHip.y) / 2,
+    z: (leftHip.z + rightHip.z) / 2
+  };
+
+  // Calculate spine vector (from hip center to shoulder center)
+  const spineVector = {
+    x: shoulderCenter.x - hipCenter.x,
+    y: shoulderCenter.y - hipCenter.y,
+    z: shoulderCenter.z - hipCenter.z
+  };
+
+  // Calculate shoulder line vector (left to right shoulder)
+  const shoulderVector = {
+    x: rightShoulder.x - leftShoulder.x,
+    y: rightShoulder.y - leftShoulder.y,
+    z: rightShoulder.z - leftShoulder.z
+  };
+
+  // Calculate hip line vector (left to right hip)
+  const hipVector = {
+    x: rightHip.x - leftHip.x,
+    y: rightHip.y - leftHip.y,
+    z: rightHip.z - leftHip.z
+  };
+
+  // Normalize vectors with safety checks
+  const normalize = (v) => {
+    const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    if (length < 0.001) return { x: 0, y: 0, z: 0 }; // Avoid division by zero
+    return {
+      x: v.x / length,
+      y: v.y / length,
+      z: v.z / length
+    };
+  };
+
+  const normalizedSpine = normalize(spineVector);
+  const normalizedShoulder = normalize(shoulderVector);
+  const normalizedHip = normalize(hipVector);
+
+  // Check if normalization was successful
+  if (normalizedSpine.x === 0 && normalizedSpine.y === 0 && normalizedSpine.z === 0) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  // Calculate torso rotations using proper mathematical approach
+  // Similar to head pose calculation but adapted for torso
+  
+  // Pitch (X-axis rotation) - forward/backward lean
+  // Calculate angle between spine and vertical (negative Y direction in screen space)
+  const pitch = Math.asin(normalizedSpine.y);
+  
+  // Yaw (Y-axis rotation) - left/right rotation
+  // Calculate horizontal angle of spine relative to forward direction (positive Z)
+  const yaw = Math.atan2(normalizedSpine.x, normalizedSpine.z);
+  
+  // Roll (Z-axis rotation) - left/right tilt
+  // Calculate tilt based on shoulder line orientation relative to horizontal
+  const roll = Math.atan2(normalizedShoulder.y, normalizedShoulder.x);
+
+  // Convert to degrees and apply sensitivity scaling
+  const torsoAngles = {
+    x: pitch ,  // Pitch sensitivity
+    y: yaw ,    // Yaw sensitivity
+    z: roll    // Roll sensitivity
+  };
+
+  // Apply calibration offset (similar to head pose)
+  const calibratedAngles = {
+    x: torsoAngles.x - torsoCalibrationOffset.x,
+    y: torsoAngles.y - torsoCalibrationOffset.y,
+    z: torsoAngles.z - torsoCalibrationOffset.z
+  };
+
+  // Clamp values to reasonable ranges to prevent extreme values
+  
+  return {
+    x: calibratedAngles.x,   // Limit pitch to reasonable range
+    y: calibratedAngles.y, // Allow full yaw rotation
+    z: calibratedAngles.z    // Limit roll to reasonable range
+  };
+}
+
 function onFaceMeshResults(results) {
   // Set canvas dimensions to match video
-  canvasElement.width = videoElement.videoWidth;
-  canvasElement.height = videoElement.videoHeight;
-  
-  // Clear canvas
-  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-  
-  // Draw video frame
-  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+  if (videoElement.videoWidth && videoElement.videoHeight) {
+    canvasElement.width = videoElement.videoWidth;
+    canvasElement.height = videoElement.videoHeight;
+  }
 
   if (results.multiFaceLandmarks) {
     for (const landmarks of results.multiFaceLandmarks) {
@@ -890,20 +1052,14 @@ function onFaceMeshResults(results) {
           const shoulderAngles = window.lastShoulderAngles || { left: 0, right: 0 };
           const armAngles = window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           const forearmAngles = window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
+          const torsoAngles = window.lastTorsoAngles || { x: 0, y: 0, z: 0 };
           
           calibrationSamples.push({
             ...rotationAngles,
             shoulderAngles,
             armAngles,
-            forearmAngles
-          });
-          
-          console.log('Calibration sample collected:', {
-            head: rotationAngles,
-            shoulders: shoulderAngles,
-            arms: armAngles,
-            forearms: forearmAngles,
-            sampleCount: calibrationSamples.length
+            forearmAngles,
+            torsoAngles
           });
         }
         
@@ -912,6 +1068,9 @@ function onFaceMeshResults(results) {
         canvasCtx.fillStyle = '#FFFFFF';
         canvasCtx.font = '24px Arial';
         canvasCtx.fillText(`Calibrating... ${Math.round(progress * 100)}%`, 10, 30);
+        canvasCtx.font = '16px Arial';
+        canvasCtx.fillText(`Samples collected: ${calibrationSamples.length}`, 10, 60);
+        canvasCtx.fillText(`Time remaining: ${Math.max(0, Math.ceil((CALIBRATION_DURATION - elapsedTime) / 1000))}s`, 10, 90);
         
         // End calibration after duration
         if (elapsedTime >= CALIBRATION_DURATION) {
@@ -931,17 +1090,33 @@ function onFaceMeshResults(results) {
           }
         }
       } else if (isCalibrated) {
+        // Store head pose data globally for pose detection system
+        window.lastHeadPose = rotationAngles;
+        
+        // Update debug info
+        debugInfo.head = rotationAngles;
+        
         // Only emit and display values if calibration is complete
         window.dispatchEvent(new CustomEvent('headPoseUpdate', {
           detail: rotationAngles
         }));
         
-        // Draw debug information
-        canvasCtx.fillStyle = '#FFFFFF';
-        canvasCtx.font = '16px Arial';
-        canvasCtx.fillText(`Pitch: ${rotationAngles.x.toFixed(2)}`, 10, 30);
-        canvasCtx.fillText(`Yaw: ${rotationAngles.y.toFixed(2)}`, 10, 60);
-        canvasCtx.fillText(`Roll: ${rotationAngles.z.toFixed(2)}`, 10, 90);
+        // Create unified pose data including head pose
+        const unifiedPoseData = {
+          head: rotationAngles,
+          torso: window.lastTorsoAngles || { x: 0, y: 0, z: 0 },
+          shoulders: window.lastShoulderAngles || { left: 0, right: 0 },
+          arms: window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+          forearms: window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+        };
+
+        // Dispatch unified pose update event
+        window.dispatchEvent(new CustomEvent('unifiedPoseUpdate', {
+          detail: unifiedPoseData
+        }));
+        
+        // Draw debug info again to ensure head pose is included
+        drawDebugInfo();
       } else {
         // Show message if not calibrated
         canvasCtx.fillStyle = '#FF0000';
@@ -987,6 +1162,135 @@ function calculateElbowAngle(shoulder, elbow, wrist) {
   const angle = Math.acos(Math.max(-1, Math.min(1, dot))) * (180 / Math.PI);
 
   return angle;
+}
+
+function drawTorsoLandmarks(landmarks) {
+  if (!landmarks) return;
+
+  // Get torso landmarks
+  const leftShoulder = landmarks[TORSO_LANDMARKS.LEFT_SHOULDER];
+  const rightShoulder = landmarks[TORSO_LANDMARKS.RIGHT_SHOULDER];
+  const leftHip = landmarks[TORSO_LANDMARKS.LEFT_HIP];
+  const rightHip = landmarks[TORSO_LANDMARKS.RIGHT_HIP];
+
+  // Validate landmarks
+  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) return;
+
+  // Draw torso landmarks with special colors
+  const drawLandmark = (landmark, color, radius = 6) => {
+    canvasCtx.fillStyle = color;
+    canvasCtx.beginPath();
+    canvasCtx.arc(
+      landmark.x * canvasElement.width,
+      landmark.y * canvasElement.height,
+      radius,
+      0,
+      2 * Math.PI
+    );
+    canvasCtx.fill();
+  };
+
+  // Draw shoulder landmarks in orange
+  drawLandmark(leftShoulder, '#000000', 8);
+  drawLandmark(rightShoulder, '#000000', 8);
+
+  // Draw hip landmarks in purple
+  drawLandmark(leftHip, '#800080', 8);
+  drawLandmark(rightHip, '#800080', 8);
+
+  // Draw spine line (hip center to shoulder center)
+  const shoulderCenter = {
+    x: (leftShoulder.x + rightShoulder.x) / 2,
+    y: (leftShoulder.y + rightShoulder.y) / 2
+  };
+  const hipCenter = {
+    x: (leftHip.x + rightHip.x) / 2,
+    y: (leftHip.y + rightHip.y) / 2
+  };
+
+  canvasCtx.strokeStyle = '#FFD700'; // Gold color for spine
+  canvasCtx.lineWidth = 4;
+  canvasCtx.beginPath();
+  canvasCtx.moveTo(hipCenter.x * canvasElement.width, hipCenter.y * canvasElement.height);
+  canvasCtx.lineTo(shoulderCenter.x * canvasElement.width, shoulderCenter.y * canvasElement.height);
+  canvasCtx.stroke();
+
+  // Draw shoulder line
+  canvasCtx.strokeStyle = '#FFA500'; // Orange for shoulder line
+  canvasCtx.lineWidth = 3;
+  canvasCtx.beginPath();
+  canvasCtx.moveTo(leftShoulder.x * canvasElement.width, leftShoulder.y * canvasElement.height);
+  canvasCtx.lineTo(rightShoulder.x * canvasElement.width, rightShoulder.y * canvasElement.height);
+  canvasCtx.stroke();
+
+  // Draw hip line
+  canvasCtx.strokeStyle = '#800080'; // Purple for hip line
+  canvasCtx.lineWidth = 3;
+  canvasCtx.beginPath();
+  canvasCtx.moveTo(leftHip.x * canvasElement.width, leftHip.y * canvasElement.height);
+  canvasCtx.lineTo(rightHip.x * canvasElement.width, rightHip.y * canvasElement.height);
+  canvasCtx.stroke();
+}
+
+// Add a new function to draw all debug information
+function drawDebugInfo() {
+  if (!isCalibrated) return;
+
+  // Head pose (white text)
+  canvasCtx.fillStyle = '#FFFFFF';
+  canvasCtx.font = '16px Arial';
+  canvasCtx.fillText(`Pitch: ${debugInfo.head.x.toFixed(2)}`, 10, 30);
+  canvasCtx.fillText(`Yaw: ${debugInfo.head.y.toFixed(2)}`, 10, 60);
+  canvasCtx.fillText(`Roll: ${debugInfo.head.z.toFixed(2)}`, 10, 90);
+  
+  // Torso angles (orange text)
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Torso - Pitch: ${debugInfo.torso.x.toFixed(1)}° Yaw: ${debugInfo.torso.y.toFixed(1)}° Roll: ${debugInfo.torso.z.toFixed(1)}°`, 10, 120);
+  
+  // Shoulder angles (green text)
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Left Shoulder: ${debugInfo.shoulders.left.toFixed(2)}`, 10, 150);
+  canvasCtx.fillText(`Right Shoulder: ${debugInfo.shoulders.right.toFixed(2)}`, 10, 180);
+  
+  // Arm angles with axis labels and degrees (magenta text)
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Left Arm - Pitch: ${debugInfo.arms.left.x.toFixed(1)}° Yaw: ${debugInfo.arms.left.y.toFixed(1)}° Roll: ${debugInfo.arms.left.z.toFixed(1)}°`, 10, 210);
+  canvasCtx.fillText(`Right Arm - Pitch: ${debugInfo.arms.right.x.toFixed(1)}° Yaw: ${debugInfo.arms.right.y.toFixed(1)}° Roll: ${debugInfo.arms.right.z.toFixed(1)}°`, 10, 240);
+  
+  // Forearm angles with axis labels and degrees (yellow text)
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Left Forearm - Pitch: ${debugInfo.forearms.left.x.toFixed(1)}° Yaw: ${debugInfo.forearms.left.y.toFixed(1)}° Roll: ${debugInfo.forearms.left.z.toFixed(1)}°`, 10, 270);
+  canvasCtx.fillText(`Right Forearm - Pitch: ${debugInfo.forearms.right.x.toFixed(1)}° Yaw: ${debugInfo.forearms.right.y.toFixed(1)}° Roll: ${debugInfo.forearms.right.z.toFixed(1)}°`, 10, 300);
+
+  // Elbow angles (cyan text)
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Left Elbow Angle: ${debugInfo.elbowAngles.left.toFixed(1)}°`, 10, 330);
+  canvasCtx.fillText(`Right Elbow Angle: ${debugInfo.elbowAngles.right.toFixed(1)}°`, 10, 360);
+
+  // 3D position debugging with color coding
+  canvasCtx.fillStyle = '#FF0000';
+  canvasCtx.fillText(`Left Shoulder 3D: (${debugInfo.shoulder3D.x.toFixed(3)}, ${debugInfo.shoulder3D.y.toFixed(3)}, ${debugInfo.shoulder3D.z.toFixed(3)})`, 10, 390);
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Left Elbow 3D: (${debugInfo.elbow3D.x.toFixed(3)}, ${debugInfo.elbow3D.y.toFixed(3)}, ${debugInfo.elbow3D.z.toFixed(3)})`, 10, 420);
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Left Wrist 3D: (${debugInfo.wrist3D.x.toFixed(3)}, ${debugInfo.wrist3D.y.toFixed(3)}, ${debugInfo.wrist3D.z.toFixed(3)})`, 10, 450);
+
+  // Vector debugging
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Upper Arm Vector: (${debugInfo.upperArmVector.x.toFixed(3)}, ${debugInfo.upperArmVector.y.toFixed(3)}, ${debugInfo.upperArmVector.z.toFixed(3)})`, 10, 480);
+  canvasCtx.fillStyle = '#000000';
+  canvasCtx.fillText(`Forearm Vector: (${debugInfo.forearmVector.x.toFixed(3)}, ${debugInfo.forearmVector.y.toFixed(3)}, ${debugInfo.forearmVector.z.toFixed(3)})`, 10, 510);
+
+  // Movement direction indicators
+  canvasCtx.fillStyle = '#FFFFFF';
+  canvasCtx.font = '14px Arial';
+  canvasCtx.fillText(`Pitch: Forward/Backward | Yaw: Left/Right | Roll: Twist`, 10, 540);
+  canvasCtx.fillText(`Move your arm forward to see Pitch change`, 10, 560);
+  canvasCtx.fillText(`Swing your arm left/right to see Yaw change`, 10, 580);
+  canvasCtx.fillText(`Rotate your wrist to see Roll change`, 10, 600);
+  canvasCtx.fillText(`Lean forward/backward to see Torso Pitch change`, 10, 620);
+  canvasCtx.fillText(`Turn left/right to see Torso Yaw change`, 10, 640);
+  canvasCtx.fillText(`Tilt left/right to see Torso Roll change`, 10, 660);
 }
 
 // Initialize when the page loads
