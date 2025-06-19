@@ -777,23 +777,23 @@ function calculateArmRotation(shoulder, elbow, wrist, reference) {
   const normalizedUpperArm = normalize(upperArm);
   const normalizedForearm = normalize(forearm);
 
-  // Create reference coordinate system for the arm
-  // Similar to how head pose uses reference points
+  // // Create reference coordinate system for the arm
+  // // Similar to how head pose uses reference points
   
-  // Forward vector (positive Z direction)
-  const forwardVector = { x: 0, y: 0, z: 1 };
+  // // Forward vector (positive Z direction)
+  // const forwardVector = { x: 0, y: 0, z: 1 };
   
-  // Up vector (negative Y direction in screen space)
-  const upVector = { x: 0, y: -1, z: 0 };
+  // // Up vector (negative Y direction in screen space)
+  // const upVector = { x: 0, y: -1, z: 0 };
   
-  // Right vector (positive X direction)
-  const rightVector = { x: 1, y: 0, z: 0 };
+  // // Right vector (positive X direction)
+  // const rightVector = { x: 1, y: 0, z: 0 };
 
-  // Calculate rotations relative to the reference coordinate system
-  // This is similar to how head pose calculates rotations
+  // // Calculate rotations relative to the reference coordinate system
+  // // This is similar to how head pose calculates rotations
   
-  // Pitch (X-axis rotation) - forward/backward movement
-  // Calculate angle between upper arm and the vertical plane (up vector)
+  // // Pitch (X-axis rotation) - forward/backward movement
+  // // Calculate angle between upper arm and the vertical plane (up vector)
   const pitch = Math.asin(normalizedUpperArm.y);
   
   // Yaw (Y-axis rotation) - left/right movement  
@@ -809,9 +809,9 @@ function calculateArmRotation(shoulder, elbow, wrist, reference) {
 
   // Convert to degrees and apply scaling
   return {
-    x: pitch * (180 / Math.PI) * 1.0,  // Pitch sensitivity
-    y: yaw * (180 / Math.PI) * 1.0,    // Yaw sensitivity  
-    z: roll * (180 / Math.PI) * 0.5    // Roll sensitivity (reduced)
+    x: pitch ,  // Pitch sensitivity
+    y: yaw ,    // Yaw sensitivity  
+    z: roll    // Roll sensitivity (reduced)
   };
 }
 
@@ -880,13 +880,13 @@ function calculateForearmRotation(elbow, wrist, reference) {
 
   // Create reference coordinate system for the forearm
   // Forward vector (positive Z direction)
-  const forwardVector = { x: 0, y: 0, z: 1 };
+  // const forwardVector = { x: 0, y: 0, z: 1 };
   
-  // Up vector (negative Y direction in screen space)
-  const upVector = { x: 0, y: -1, z: 0 };
+  // // Up vector (negative Y direction in screen space)
+  // const upVector = { x: 0, y: -1, z: 0 };
   
-  // Right vector (positive X direction)
-  const rightVector = { x: 1, y: 0, z: 0 };
+  // // Right vector (positive X direction)
+  // const rightVector = { x: 1, y: 0, z: 0 };
 
   // Calculate rotations relative to the reference coordinate system
   // Pitch (X-axis rotation) - forward/backward movement
@@ -900,9 +900,9 @@ function calculateForearmRotation(elbow, wrist, reference) {
 
   // Convert to degrees and apply scaling
   return {
-    x: pitch * (180 / Math.PI) * 1.0,  // Pitch sensitivity
-    y: yaw * (180 / Math.PI) * 1.0,    // Yaw sensitivity
-    z: roll * (180 / Math.PI) * 0.5    // Roll sensitivity (reduced)
+    x: pitch ,  // Pitch sensitivity
+    y: yaw ,    // Yaw sensitivity
+    z: roll   // Roll sensitivity (reduced)
   };
 }
 
@@ -1016,8 +1016,6 @@ function calculateTorsoAngles(landmarks) {
     y: torsoAngles.y - torsoCalibrationOffset.y,
     z: torsoAngles.z - torsoCalibrationOffset.z
   };
-
-  // Clamp values to reasonable ranges to prevent extreme values
   
   return {
     x: calibratedAngles.x,   // Limit pitch to reasonable range

@@ -68,6 +68,12 @@ loader.load('models/demo.glb', (gltf) => {
       } else if (obj.name.toLowerCase().includes('spine2')) {
         spine = obj;
         console.log("Found Spine:", obj.name);
+      } else if (obj.name.toLowerCase().includes('forearml')) {
+        leftForearmBone = obj;
+        console.log("Found right Upper Arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('forearmr')) {
+        rightForearmBone = obj;
+        console.log("Found Spine:", obj.name);
       }
       
       
@@ -79,7 +85,7 @@ loader.load('models/demo.glb', (gltf) => {
 });
 
 // Camera position
-camera.position.z = 3;
+camera.position.z = 5;
 
 function degToRad(degrees) {
   return degrees * (Math.PI / 180);
@@ -87,11 +93,11 @@ function degToRad(degrees) {
 
 window.addEventListener('unifiedPoseUpdate', (event) => {
   const { head, shoulders, arms, forearms, torso } = event.detail;
-  console.log('Unified pose update received:', event.detail);
-  
-  setTimeout(()=>{
-    console.log("Waited");
-  },30000)
+  // console.log('Unified pose update received:', event.detail);
+  console.log(leftForearmBone, rightForearmBone)
+  // setTimeout(()=>{
+  //   console.log("Waited");
+  // },30000)
     
   if (headBone) {
     headBone.rotation.x = -head.x;
@@ -104,6 +110,8 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
     rightShoulderBone.rotation.y = shoulders.right * 2 ;
   }
 
+  // this works just commenting for cleaner look
+
   if (spine) {
 
     spine.rotation.x = torso.x * 2; // this goes for the front and back shift
@@ -111,14 +119,22 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
     spine.rotation.z = -torso.z; //this goes left and right
   }
 
-  // if(leftArmBone && rightArmBone) {
-  //   leftArmBone.rotation.x = degToRad(arms.left.x);
-  //   leftArmBone.rotation.y = degToRad(arms.left.y);
-  //   leftArmBone.rotation.z = degToRad(arms.left.z);
+  if(leftArmBone && rightArmBone) {
+    leftArmBone.rotation.x =-arms.left.x; // rotation on the left and right axis works
+    // leftArmBone.rotation.y = degToRad(arms.left.y);
+    // leftArmBone.rotation.z = degToRad(arms.left.z);
 
-  //   rightArmBone.rotation.x = degToRad(arms.right.x);
-  //   rightArmBone.rotation.y = degToRad(arms.right.y);
-  //   rightArmBone.rotation.z = degToRad(arms.right.z);
+    rightArmBone.rotation.x = -arms.right.x; // rotation on the left and right axis works
+    // rightArmBone.rotation.y = degToRad(arms.right.y);
+    // rightArmBone.rotation.z = degToRad(arms.right.z);
+  }
+
+  // if ( leftForearmBone && rightForearmBone ) {
+    
+  //   leftForearmBone.rotation.x = forearms.x;
+    
+  //   rightForearmBone.rotation.x= forearms.x;
+
   // }
 
 });
