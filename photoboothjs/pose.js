@@ -10,6 +10,10 @@ let videoElement;
 let canvasElement;
 let canvasCtx;
 
+// Add mask canvas for segmentation
+let maskCanvas;
+let maskCtx;
+
 // Calibration variables
 let isCalibrating = false;
 let calibrationSamples = [];
@@ -121,6 +125,19 @@ async function initPoseDetection() {
   document.querySelector('.container').appendChild(canvasElement);
   
   canvasCtx = canvasElement.getContext('2d');
+
+  // Create and append the mask canvas (for segmentation mask)
+  maskCanvas = document.createElement('canvas');
+  maskCanvas.style.position = 'absolute';
+  maskCanvas.style.top = '0';
+  maskCanvas.style.left = '0';
+  maskCanvas.style.width = '100%';
+  maskCanvas.style.height = '100%';
+  maskCanvas.style.zIndex = '2'; // On top of debug and 3D canvas
+  maskCanvas.style.pointerEvents = 'none';
+  maskCanvas.id = 'mask-canvas';
+  document.querySelector('.container').appendChild(maskCanvas);
+  maskCtx = maskCanvas.getContext('2d');
 
   try {
     // Initialize MediaPipe Face Mesh
@@ -456,6 +473,16 @@ function onPoseResults(results) {
   
   // Clear canvas every frame to ensure clean drawing
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+  // Draw segmentation mask if available
+  if (results.segmentationMask) {
+    maskCanvas.width = videoElement.videoWidth;
+    maskCanvas.height = videoElement.videoHeight;
+    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    maskCtx.drawImage(results.segmentationMask, 0, 0, maskCanvas.width, maskCanvas.height);
+  } else {
+    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+  }
 
   // Draw pose landmarks
   if (results.poseLandmarks) {

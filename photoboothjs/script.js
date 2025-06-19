@@ -6,6 +6,18 @@ const camera = new THREE.PerspectiveCamera(75, container.clientWidth/container.c
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('avatar-canvas'), alpha: true });
 renderer.setSize(container.clientWidth, container.clientHeight);
 
+// Add AR output canvas for final compositing
+const arOutputCanvas = document.createElement('canvas');
+arOutputCanvas.style.position = 'absolute';
+arOutputCanvas.style.top = '0';
+arOutputCanvas.style.left = '0';
+arOutputCanvas.style.width = '100%';
+arOutputCanvas.style.height = '100%';
+arOutputCanvas.style.zIndex = '10'; // Topmost
+arOutputCanvas.id = 'ar-output-canvas';
+document.querySelector('.container').appendChild(arOutputCanvas);
+const arOutputCtx = arOutputCanvas.getContext('2d');
+
 // Handle window resize
 window.addEventListener('resize', () => {
   const width = container.clientWidth;
@@ -85,7 +97,7 @@ loader.load('models/demo.glb', (gltf) => {
 });
 
 // Camera position
-camera.position.z = 5;
+camera.position.z = 2;
 
 function degToRad(degrees) {
   return degrees * (Math.PI / 180);
@@ -143,6 +155,7 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
+  compositeAROutput();
 }
 animate();
 
@@ -153,3 +166,43 @@ navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
 }).catch((err) => {
   console.error("Webcam error:", err);
 });
+
+// Composite AR output: video, 3D model, and segmentation mask
+function compositeAROutput() {
+  const video = document.getElementById('webcam');
+  const maskCanvas = document.getElementById('mask-canvas');
+  const threeJsCanvas = renderer.domElement;
+
+  if (!video.videoWidth || !video.videoHeight) return;
+  arOutputCanvas.width = video.videoWidth;
+  arOutputCanvas.height = video.videoHeight;
+
+  // 1. Draw the video as the background
+  arOutputCtx.clearRect(0, 0, arOutputCanvas.width, arOutputCanvas.height);
+  arOutputCtx.drawImage(video, 0, 0, arOutputCanvas.width, arOutputCanvas.height);
+
+  // 2. Draw the 3D model everywhere
+  arOutputCtx.drawImage(threeJsCanvas, 0, 0, arOutputCanvas.width, arOutputCanvas.height);
+
+  // 3. Use the mask to ERASE the 3D model where the person is present
+  if (maskCanvas && maskCanvas.width && maskCanvas.height) {
+    arOutputCtx.save();
+    arOutputCtx.globalCompositeOperation = 'destination-out';
+    arOutputCtx.drawImage(maskCanvas, 0, 0, arOutputCanvas.width, arOutputCanvas.height);
+    arOutputCtx.restore();
+
+    // (Optional) Draw the video again where the mask is present for perfect edges
+    arOutputCtx.save();
+    arOutputCtx.globalCompositeOperation = 'destination-atop';
+    arOutputCtx.drawImage(video, 0, 0, arOutputCanvas.width, arOutputCanvas.height);
+    arOutputCtx.restore();
+  }
+}
+
+// Hide the Three.js, mask, and debug canvases so only the AR output is visible
+const threeJsCanvas = renderer.domElement;
+threeJsCanvas.style.display = 'none';
+const maskCanvas = document.getElementById('mask-canvas');
+if (maskCanvas) maskCanvas.style.display = 'none';
+const debugCanvas = document.getElementById('debug-canvas');
+if (debugCanvas) debugCanvas.style.display = 'none';
