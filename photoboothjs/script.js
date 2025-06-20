@@ -53,7 +53,7 @@ let spine = null;
 
 // Load GLB model
 const loader = new GLTFLoader();
-loader.load('models/demo.glb', (gltf) => {
+loader.load('models/boy.glb', (gltf) => {
   const model = gltf.scene;
   model.scale.set(1.5, 1.5, 1.5);
   model.position.set(0, -1.5, 0);
@@ -61,23 +61,25 @@ loader.load('models/demo.glb', (gltf) => {
 
   // Find the bones
   model.traverse((obj) => {
+
     if (obj.isBone) {
-      if (obj.name.toLowerCase().includes('head')) {
+      console.log(obj)
+      if (obj.name.toLowerCase().includes('head_3')) {
         headBone = obj;
         console.log("Found head bone:", obj.name);
-      } else if (obj.name.toLowerCase().includes('shoulderl')) {
+      } else if (obj.name.toLowerCase().includes('leftshoulder')) {
         leftShoulderBone = obj;
         console.log("Found left shoulder bone:", obj.name);
-      } else if (obj.name.toLowerCase().includes('shoulderr')) {
+      } else if (obj.name.toLowerCase().includes('rightshoulder')) {
         rightShoulderBone = obj;
         console.log("Found right shoulder bone:", obj.name);
-      } else if (obj.name.toLowerCase().includes('upper_arml')) {
+      } else if (obj.name.toLowerCase().includes('leftarm')) {
         leftArmBone = obj;
         console.log("Found left Upper Arm bone:", obj.name);
-      } else if (obj.name.toLowerCase().includes('upper_armr')) {
+      } else if (obj.name.toLowerCase().includes('rightarm')) {
         rightArmBone = obj;
         console.log("Found right Upper Arm bone:", obj.name);
-      } else if (obj.name.toLowerCase().includes('spine2')) {
+      } else if (obj.name.toLowerCase().includes('spine1_54')) {
         spine = obj;
         console.log("Found Spine:", obj.name);
       } else if (obj.name.toLowerCase().includes('forearml')) {
@@ -106,7 +108,7 @@ function degToRad(degrees) {
 window.addEventListener('unifiedPoseUpdate', (event) => {
   const { head, shoulders, arms, forearms, torso } = event.detail;
   // console.log('Unified pose update received:', event.detail);
-  console.log(leftForearmBone, rightForearmBone)
+  // console.log(leftForearmBone, rightForearmBone)
   // setTimeout(()=>{
   //   console.log("Waited");
   // },30000)
@@ -126,17 +128,17 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
 
   if (spine) {
 
-    spine.rotation.x = torso.x * 2; // this goes for the front and back shift
+    spine.rotation.x = torso.x; // this goes for the front and back shift
     // spine.rotation.y = torso.y;
     spine.rotation.z = -torso.z; //this goes left and right
   }
 
   if(leftArmBone && rightArmBone) {
-    leftArmBone.rotation.x =-arms.left.x; // rotation on the left and right axis works
+    leftArmBone.rotation.x =arms.left.x; // rotation on the left and right axis works
     // leftArmBone.rotation.y = degToRad(arms.left.y);
     // leftArmBone.rotation.z = degToRad(arms.left.z);
 
-    rightArmBone.rotation.x = -arms.right.x; // rotation on the left and right axis works
+    rightArmBone.rotation.x = arms.right.x; // rotation on the left and right axis works
     // rightArmBone.rotation.y = degToRad(arms.right.y);
     // rightArmBone.rotation.z = degToRad(arms.right.z);
   }
