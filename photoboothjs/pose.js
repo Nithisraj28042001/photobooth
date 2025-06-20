@@ -119,7 +119,7 @@ async function initPoseDetection() {
   canvasElement.style.left = '0';
   canvasElement.style.width = '100%';
   canvasElement.style.height = '100%';
-  canvasElement.style.zIndex = '1'; // Higher than 3D canvas
+  canvasElement.style.zIndex = '20'; // Ensure debug canvas is always on top
   canvasElement.style.pointerEvents = 'none';
   canvasElement.id = 'debug-canvas'; // Give it a unique ID
   document.querySelector('.container').appendChild(canvasElement);
