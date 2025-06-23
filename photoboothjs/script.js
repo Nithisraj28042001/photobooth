@@ -49,6 +49,8 @@ let leftArmBone = null;
 let rightArmBone = null;
 let leftForearmBone = null;
 let rightForearmBone = null;
+let leftThighBone = null;
+let rightThighBone = null;
 let spine = null;
 
 // Load GLB model
@@ -88,6 +90,12 @@ loader.load('models/boy.glb', (gltf) => {
       } else if (obj.name.toLowerCase().includes('rightforearm_50')) {
         rightForearmBone = obj;
         console.log("Found right fore arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('leftupleg_60')) {
+        leftThighBone = obj;
+        console.log("Found left Fore thigh bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('rightupleg_65')) {
+        rightThighBone = obj;
+        console.log("Found right fore thigh bone:", obj.name);
       }
       
       
@@ -106,7 +114,7 @@ function degToRad(degrees) {
 }
 
 window.addEventListener('unifiedPoseUpdate', (event) => {
-  const { head, shoulders, arms, forearms, torso } = event.detail;
+  const { head, shoulders, arms, forearms, torso, thighs } = event.detail;
   // console.log('Unified pose update received:', event.detail);
   // console.log(leftForearmBone, rightForearmBone)
   // setTimeout(()=>{
@@ -155,6 +163,21 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
     rightForearmBone.rotation.z = -forearms.right.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
 
     console.log("forearms", forearms)
+  }
+
+  if (leftThighBone && rightThighBone) {
+
+    console.log("thigs", thighs);
+    console.log("bones", leftThighBone, rightThighBone);
+
+    leftThighBone.rotation.x = thighs.left.x;
+    // leftThighBone.rotation.y = thighs.left.y;
+    // leftThighBone.rotation.z = thighs.left.z;
+
+
+    rightThighBone.rotation.x = thighs.right.x;
+    // rightThighBone.rotation.y = thighs.right.y;
+    // rightThighBone.rotation.z = thighs.right.z;
   }
 
 });
