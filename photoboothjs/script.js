@@ -135,24 +135,24 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
 
   if(leftArmBone && rightArmBone) {
     leftArmBone.rotation.x =arms.left.x; // rotation on the left and right axis works
-    leftArmBone.rotation.y = arms.left.y;
-    leftArmBone.rotation.z = -arms.left.z;
+    //leftArmBone.rotation.y = arms.left.y;
+    //leftArmBone.rotation.z = -arms.left.z;
 
     rightArmBone.rotation.x = arms.right.x; // rotation on the left and right axis works
-    rightArmBone.rotation.y = arms.right.y;
-    rightArmBone.rotation.z = -arms.right.z;
+    //rightArmBone.rotation.y = arms.right.y;
+    //rightArmBone.rotation.z = -arms.right.z;
   }
 
   if ( leftForearmBone && rightForearmBone ) {
     
-     leftForearmBone.rotation.x = forearms.left.x;
-     leftForearmBone.rotation.y = forearms.left.y;
-     leftForearmBone.rotation.z = forearms.left.z; // if required a negative would do the job
+    leftForearmBone.rotation.x = forearms.left.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
+    // leftForearmBone.rotation.y = forearms.left.y; // half baked but decent. But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
+    leftForearmBone.rotation.z = -forearms.left.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
 
     
-     rightForearmBone.rotation.x= forearms.right.x;
-     rightForearmBone.rotation.y= forearms.right.y;
-     rightForearmBone.rotation.z= forearms.right.z; // if required a negative would do the job
+    rightForearmBone.rotation.x= forearms.right.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
+     // rightForearmBone.rotation.y = forearms.right.y; // But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
+    rightForearmBone.rotation.z = -forearms.right.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
 
     console.log("forearms", forearms)
   }
