@@ -56,6 +56,8 @@ let leftArmBone = null;
 let rightArmBone = null;
 let leftForearmBone = null;
 let rightForearmBone = null;
+let leftThighBone = null;
+let rightThighBone = null;
 let spine = null;
 
 let jawBone = null;
@@ -75,56 +77,50 @@ loader.load(
     model.position.set(0, -1.5, 0);
     scene.add(model);
 
-    // Find the bones
-    model.traverse((obj) => {
-      if (obj.isBone) {
-        console.log(obj);
-        if (obj.name.toLowerCase().includes("head_3")) {
-          headBone = obj;
-          console.log("Found head bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("leftshoulder_28")) {
-          leftShoulderBone = obj;
-          console.log("Found left shoulder bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("rightshoulder_52")) {
-          rightShoulderBone = obj;
-          console.log("Found right shoulder bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("leftarm_27")) {
-          leftArmBone = obj;
-          console.log("Found left Upper Arm bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("rightarm_51")) {
-          rightArmBone = obj;
-          console.log("Found right Upper Arm bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("spine1_54")) {
-          spine = obj;
-          console.log("Found Spine:", obj.name);
-        } else if (obj.name.toLowerCase().includes("leftforearm_26")) {
-          leftForearmBone = obj;
-          console.log("Found left Fore Arm bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("rightforearm_50")) {
-          rightForearmBone = obj;
-          console.log("Found right fore arm bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("jaw")) {
-          jawBone = obj;
-          console.log("Found jaw bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("lefteye_1")) {
-          leftEyeBone = obj;
-          console.log("Found left eye bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes("righteye_2")) {
-          rightEyeBone = obj;
-          console.log("Found right eye bone:", obj.name);
-        } else if (obj.name.toLowerCase().includes('lefthand_25')) {
-          leftWristBone = obj;
-        } else if (obj.name.toLowerCase().includes('righthand_49')) {
-          rightWristBone = obj;
-        }
+  // Find the bones
+  model.traverse((obj) => {
+
+    if (obj.isBone) {
+      console.log(obj)
+      if (obj.name.toLowerCase().includes('head_3')) {
+        headBone = obj;
+        console.log("Found head bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('leftshoulder_28')) {
+        leftShoulderBone = obj;
+        console.log("Found left shoulder bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('rightshoulder_52')) {
+        rightShoulderBone = obj;
+        console.log("Found right shoulder bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('leftarm_27')) {
+        leftArmBone = obj;
+        console.log("Found left Upper Arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('rightarm_51')) {
+        rightArmBone = obj;
+        console.log("Found right Upper Arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('spine1_54')) {
+        spine = obj;
+        console.log("Found Spine:", obj.name);
+      } else if (obj.name.toLowerCase().includes('leftforearm_26')) {
+        leftForearmBone = obj;
+        console.log("Found left Fore Arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('rightforearm_50')) {
+        rightForearmBone = obj;
+        console.log("Found right fore arm bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('leftupleg_60')) {
+        leftThighBone = obj;
+        console.log("Found left Fore thigh bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('rightupleg_65')) {
+        rightThighBone = obj;
+        console.log("Found right fore thigh bone:", obj.name);
       }
-    });
-  },
-  undefined,
-  (err) => {
-    console.error("Error loading model:", err);
-  }
-);
+      
+      
+    }
+  });
+
+}, undefined, (err) => {
+  console.error('Error loading model:', err);
+});
 
 // Camera position
 camera.position.z = 2;
@@ -133,7 +129,8 @@ function degToRad(degrees) {
   return degrees * (Math.PI / 180);
 }
 
-window.addEventListener("unifiedPoseUpdate", (event) => {
+window.addEventListener('unifiedPoseUpdate', (event) => {
+  const { head, shoulders, arms, forearms, torso, thighs } = event.detail;
   // console.log('Unified pose update received:', event.detail);
   // console.log(leftForearmBone, rightForearmBone)
   // setTimeout(()=>{
@@ -161,93 +158,45 @@ window.addEventListener("unifiedPoseUpdate", (event) => {
     spine.rotation.z = -torso.z; //this goes left and right
   }
 
-  if (leftArmBone && rightArmBone) {
-    leftArmBone.rotation.x = arms.left.x; // rotation on the left and right axis works
+  if(leftArmBone && rightArmBone) {
+    leftArmBone.rotation.x =arms.left.x; // rotation on the left and right axis works
+    //leftArmBone.rotation.y = arms.left.y;
+    //leftArmBone.rotation.z = -arms.left.z;
+
     rightArmBone.rotation.x = arms.right.x; // rotation on the left and right axis works
-  }
-  // --- Facial Animation using tasks-vision FaceLandmarker ---
-  if (jawBone && facial) {
-    // Prefer blendshapes if available for jaw open
-    let jawOpenAmount = 0;
-    if (facial.blendshapes && Array.isArray(facial.blendshapes.categories)) {
-      // Find the blendshape for jawOpen (MediaPipe uses 'jawOpen' or similar)
-      const jawOpen = facial.blendshapes.categories.find(
-        (c) => c.categoryName && c.categoryName.toLowerCase().includes("jawopen")
-      );
-      if (jawOpen) {
-        jawOpenAmount = Math.min(jawOpen.score * 1.2, 1.2); // scale for effect
-      } else {
-        // Fallback to mouthOpen distance
-        const openThreshold = 0.02;
-        jawOpenAmount = Math.min((facial.mouthOpen - openThreshold) * 15, 1.2);
-      }
-    } else {
-      // Fallback to mouthOpen distance
-      const openThreshold = 0.02;
-      jawOpenAmount = Math.min((facial.mouthOpen - openThreshold) * 15, 1.2);
-    }
-    jawBone.rotation.x = -jawOpenAmount;
+    //rightArmBone.rotation.y = arms.right.y;
+    //rightArmBone.rotation.z = -arms.right.z;
   }
 
-  if (leftEyeBone && rightEyeBone && facial) {
-    // Prefer blendshapes if available for eye blink
-    let leftClosed = false;
-    let rightClosed = false;
-    if (facial.blendshapes && Array.isArray(facial.blendshapes.categories)) {
-      const leftBlink = facial.blendshapes.categories.find(
-        (c) => c.categoryName && c.categoryName.toLowerCase().includes("eyeBlinkLeft")
-      );
-      const rightBlink = facial.blendshapes.categories.find(
-        (c) => c.categoryName && c.categoryName.toLowerCase().includes("eyeBlinkRight")
-      );
-      leftClosed = leftBlink ? leftBlink.score > 0.5 : false;
-      rightClosed = rightBlink ? rightBlink.score > 0.5 : false;
-    } else {
-      // Fallback to eye openness
-      const eyeThreshold = 0.004;
-      leftClosed = facial.leftEyeOpen < eyeThreshold;
-      rightClosed = facial.rightEyeOpen < eyeThreshold;
-    }
-    leftEyeBone.scale.y = leftClosed ? 0.2 : 1;
-    rightEyeBone.scale.y = rightClosed ? 0.2 : 1;
+  if ( leftForearmBone && rightForearmBone ) {
+    
+    leftForearmBone.rotation.x = forearms.left.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
+    // leftForearmBone.rotation.y = forearms.left.y; // half baked but decent. But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
+    leftForearmBone.rotation.z = -forearms.left.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
+
+    
+    rightForearmBone.rotation.x= forearms.right.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
+     // rightForearmBone.rotation.y = forearms.right.y; // But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
+    rightForearmBone.rotation.z = -forearms.right.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
+
+    console.log("forearms", forearms)
   }
 
-   // if (leftForearmBone && rightForearmBone) {
-  //   leftForearmBone.rotation.x = forearms.left.x;
-  //   leftForearmBone.rotation.y = forearms.left.y;
-  //   leftForearmBone.rotation.z = forearms.left.z; // if required a negative would do the job
+  if (leftThighBone && rightThighBone) {
 
-  //   rightForearmBone.rotation.x = forearms.right.x;
-  //   rightForearmBone.rotation.y = forearms.right.y;
-  //   rightForearmBone.rotation.z = forearms.right.z; // if required a negative would do the job
+    console.log("thigs", thighs);
+    console.log("bones", leftThighBone, rightThighBone);
 
-  //   console.log("forearms", forearms);
-  // Optionally: Animate other facial features (eyebrows, mouth corners, etc.) using blendshapes
-  // Example: Smile (mouth corners up)
-  // if (facial && facial.blendshapes && Array.isArray(facial.blendshapes.categories)) {
-  //   const smile = facial.blendshapes.categories.find(
-  //     (c) => c.categoryName && c.categoryName.toLowerCase().includes("smile")
-  //   );
-  //   if (smile && leftMouthCornerBone && rightMouthCornerBone) {
-  //     leftMouthCornerBone.position.y = smile.score * 0.1;
-  //     rightMouthCornerBone.position.y = smile.score * 0.1;
-  //   }
-  // }
-});
+    leftThighBone.rotation.x = thighs.left.x;
+    // leftThighBone.rotation.y = thighs.left.y;
+    // leftThighBone.rotation.z = thighs.left.z;
 
-// Listen for wrist update and apply to 3D model
-window.addEventListener('wristUpdate', (event) => {
-  const { left, right } = event.detail;
-  if (leftWristBone && left) {
-    leftWristBone.position.x = left.x;
-    leftWristBone.position.y = -left.y;
-    leftWristBone.position.z = -left.z;
+
+    rightThighBone.rotation.x = thighs.right.x;
+    // rightThighBone.rotation.y = thighs.right.y;
+    // rightThighBone.rotation.z = thighs.right.z;
   }
-  if (rightWristBone && right) {
-    rightWristBone.position.x = right.x;
-    rightWristBone.position.y = -right.y;
-    rightWristBone.position.z = -right.z;
-  }
+
 });
 
 // Animate

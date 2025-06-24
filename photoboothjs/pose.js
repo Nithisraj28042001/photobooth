@@ -76,6 +76,16 @@ const TORSO_LANDMARKS = {
   RIGHT_HIP: 24
 };
 
+// Add leg landmarks
+const LEG_LANDMARKS = {
+  LEFT_HIP: 23,
+  LEFT_KNEE: 25,
+  LEFT_ANKLE: 27,
+  RIGHT_HIP: 24,
+  RIGHT_KNEE: 26,
+  RIGHT_ANKLE: 28
+};
+
 // Add these variables with other calibration variables
 let armCalibrationOffset = {
   left: { x: 0, y: 0, z: 0 },
@@ -87,6 +97,12 @@ let torsoCalibrationOffset = { x: 0, y: 0, z: 0 };
 
 // Add these variables with other calibration variables
 let forearmCalibrationOffset = {
+  left: { x: 0, y: 0, z: 0 },
+  right: { x: 0, y: 0, z: 0 }
+};
+
+// Add these variables with other calibration variables
+let legCalibrationOffset = {
   left: { x: 0, y: 0, z: 0 },
   right: { x: 0, y: 0, z: 0 }
 };
@@ -103,7 +119,8 @@ let debugInfo = {
   elbow3D: { x: 0, y: 0, z: 0 },
   wrist3D: { x: 0, y: 0, z: 0 },
   upperArmVector: { x: 0, y: 0, z: 0 },
-  forearmVector: { x: 0, y: 0, z: 0 }
+  forearmVector: { x: 0, y: 0, z: 0 },
+  thighs: { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
 };
 
 let lastFrameTime = 0;
@@ -370,6 +387,33 @@ function calculateCalibrationOffset() {
     }
   };
 
+  // Calculate leg calibration offset
+  const legSum = calibrationSamples.reduce((acc, sample) => ({
+    left: {
+      x: acc.left.x + (sample.thighAngles?.left?.x || 0),
+      y: acc.left.y + (sample.thighAngles?.left?.y || 0),
+      z: acc.left.z + (sample.thighAngles?.left?.z || 0)
+    },
+    right: {
+      x: acc.right.x + (sample.thighAngles?.right?.x || 0),
+      y: acc.right.y + (sample.thighAngles?.right?.y || 0),
+      z: acc.right.z + (sample.thighAngles?.right?.z || 0)
+    }
+  }), { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } });
+
+  legCalibrationOffset = {
+    left: {
+      x: legSum.left.x / calibrationSamples.length,
+      y: legSum.left.y / calibrationSamples.length,
+      z: legSum.left.z / calibrationSamples.length
+    },
+    right: {
+      x: legSum.right.x / calibrationSamples.length,
+      y: legSum.right.y / calibrationSamples.length,
+      z: legSum.right.z / calibrationSamples.length
+    }
+  };
+
   // Calculate torso calibration offset
   const torsoSum = calibrationSamples.reduce((acc, sample) => ({
     x: acc.x + (sample.torsoAngles?.x || 0),
@@ -577,13 +621,18 @@ function onPoseResults(results) {
         z: leftWrist.z - leftElbow.z
       };
 
+      // Calculate thigh angles
+      const thighAngles = calculateThighAngles(results.poseLandmarks);
+      debugInfo.thighs = thighAngles;
+
       // Create unified pose data object
       const unifiedPoseData = {
         head: window.lastHeadPose || { x: 0, y: 0, z: 0 },
         shoulders: shoulderAngles,
         arms: armAngles,
         forearms: forearmAngles,
-        torso: torsoAngles
+        torso: torsoAngles,
+        thighs: thighAngles
       };
 
       // Dispatch unified pose update event
@@ -1101,18 +1150,19 @@ async function onFaceMeshResults(results) {
         const elapsedTime = currentTime - calibrationStartTime;
         
         if (elapsedTime % CALIBRATION_SAMPLE_RATE < 16) {
-          const rotationAngles = calculateHeadPose(landmarks);
           const shoulderAngles = window.lastShoulderAngles || { left: 0, right: 0 };
           const armAngles = window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           const forearmAngles = window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           const torsoAngles = window.lastTorsoAngles || { x: 0, y: 0, z: 0 };
+          const thighAngles = calculateThighAngles(landmarks);
           
           calibrationSamples.push({
             ...rotationAngles,
             shoulderAngles,
             armAngles,
             forearmAngles,
-            torsoAngles
+            torsoAngles,
+            thighAngles
           });
         }
         
@@ -1367,6 +1417,66 @@ function drawDebugInfo() {
   canvasCtx.fillText(`Lean forward/backward to see Torso Pitch change`, 10, 620);
   canvasCtx.fillText(`Turn left/right to see Torso Yaw change`, 10, 640);
   canvasCtx.fillText(`Tilt left/right to see Torso Roll change`, 10, 660);
+}
+
+function calculateThighAngles(landmarks) {
+  if (!landmarks) return { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
+
+  // Get relevant landmarks
+  const leftHip = landmarks[LEG_LANDMARKS.LEFT_HIP];
+  const leftKnee = landmarks[LEG_LANDMARKS.LEFT_KNEE];
+  const rightHip = landmarks[LEG_LANDMARKS.RIGHT_HIP];
+  const rightKnee = landmarks[LEG_LANDMARKS.RIGHT_KNEE];
+
+  // Calculate left thigh angles
+  const leftThighAngles = calculateThighRotation(leftHip, leftKnee, { x: leftHip.x, y: leftHip.y - 1 });
+  // Calculate right thigh angles
+  const rightThighAngles = calculateThighRotation(rightHip, rightKnee, { x: rightHip.x, y: rightHip.y - 1 });
+
+  // Apply calibration offset
+  const calibratedAngles = {
+    left: {
+      x: leftThighAngles.x - legCalibrationOffset.left.x,
+      y: leftThighAngles.y - legCalibrationOffset.left.y,
+      z: leftThighAngles.z - legCalibrationOffset.left.z
+    },
+    right: {
+      x: rightThighAngles.x - legCalibrationOffset.right.x,
+      y: rightThighAngles.y - legCalibrationOffset.right.y,
+      z: rightThighAngles.z - legCalibrationOffset.right.z
+    }
+  };
+  return calibratedAngles;
+}
+
+function calculateThighRotation(hip, knee, reference) {
+  // Calculate the thigh vector in 3D space
+  const thigh = {
+    x: knee.x - hip.x,
+    y: knee.y - hip.y,
+    z: knee.z - hip.z
+  };
+  // Normalize the thigh vector
+  const normalize = (v) => {
+    const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return {
+      x: v.x / length,
+      y: v.y / length,
+      z: v.z / length
+    };
+  };
+  const normalizedThigh = normalize(thigh);
+  // Pitch (X-axis rotation) - forward/backward movement
+  const pitch = Math.asin(normalizedThigh.y);
+  // Yaw (Y-axis rotation) - left/right movement
+  const yaw = Math.atan2(normalizedThigh.x, normalizedThigh.z);
+  // Roll (Z-axis rotation) - twist
+  const roll = 0; // Not meaningful for thigh alone
+  return {
+    x: pitch,
+    y: yaw,
+    z: roll
+  };
 }
 
 // Initialize when the page loads
