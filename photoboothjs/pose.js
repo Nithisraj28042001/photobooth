@@ -2,6 +2,8 @@ import * as poseDetection from '@mediapipe/pose';
 import { Camera } from '@mediapipe/camera_utils';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import * as faceMesh from '@mediapipe/face_mesh';
+import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import * as hands from '@mediapipe/hands';
 
 let pose;
 let faceMeshDetector;
@@ -131,6 +133,11 @@ let debugInfo = {
 let lastFrameTime = 0;
 const FRAME_RATE = 30; // 30 FPS for debug updates
 
+// FaceLandmarker variables
+let faceLandmarker;
+let faceLandmarkerReady = false;
+let lastFacialData = null;
+
 async function initPoseDetection() {
   videoElement = document.getElementById('webcam');
   
@@ -208,10 +215,6 @@ async function initPoseDetection() {
       minTrackingConfidence: 0.5
     });
 
-    // Add error handlers for both detectors
-    faceMeshDetector.onResults(onFaceMeshResults);
-    pose.onResults(onPoseResults);
-
     // Initialize camera with retry logic
     let retryCount = 0;
     const maxRetries = 3;
@@ -270,6 +273,21 @@ async function initPoseDetection() {
     canvasCtx.font = '24px Arial';
     canvasCtx.fillText('Error initializing face detection. Please refresh the page.', 10, 30);
   }
+
+  // Initialize FaceLandmarker
+  const vision = await FilesetResolver.forVisionTasks(
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
+  );
+  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+      delegate: 'CPU'
+    },
+    outputFaceBlendshapes: true,
+    runningMode: 'VIDEO',
+    numFaces: 1
+  });
+  faceLandmarkerReady = true;
 }
 
 function startCalibration() {
@@ -671,6 +689,16 @@ function onPoseResults(results) {
 
       // Draw all debug information
       drawDebugInfo();
+
+      // Dispatch wrist positions (single joint per hand)
+      const leftWristPos = results.poseLandmarks[POSE_LANDMARKS.LEFT_WRIST];
+      const rightWristPos = results.poseLandmarks[POSE_LANDMARKS.RIGHT_WRIST];
+      window.dispatchEvent(new CustomEvent('wristUpdate', {
+        detail: {
+          left: leftWristPos,
+          right: rightWristPos
+        }
+      }));
     }
   }
 }
@@ -1147,7 +1175,7 @@ function calculateTorsoAngles(landmarks) {
   };
 }
 
-function onFaceMeshResults(results) {
+async function onFaceMeshResults(results) {
   // Set canvas dimensions to match video
   if (videoElement.videoWidth && videoElement.videoHeight) {
     canvasElement.width = videoElement.videoWidth;
@@ -1247,6 +1275,29 @@ function onFaceMeshResults(results) {
         canvasCtx.fillStyle = '#FF0000';
         canvasCtx.font = '24px Arial';
         canvasCtx.fillText('Please wait for calibration...', 10, 30);
+      }
+    }
+  }
+
+  // Run FaceLandmarker if ready
+  if (faceLandmarkerReady && results.image) {
+    const currentTime = performance.now();
+    if (currentTime - lastFrameTime >= 1000 / FRAME_RATE) {
+      lastFrameTime = currentTime;
+      const facialData = await faceLandmarker.detectForVideo(results.image, currentTime);
+      if (facialData.faceLandmarks && facialData.faceLandmarks.length > 0) {
+        lastFacialData = facialData;
+        const unifiedPoseData = {
+          head: window.lastHeadPose || { x: 0, y: 0, z: 0 },
+          torso: window.lastTorsoAngles || { x: 0, y: 0, z: 0 },
+          shoulders: window.lastShoulderAngles || { left: 0, right: 0 },
+          arms: window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+          forearms: window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+          facial: facialData
+        };
+        window.dispatchEvent(new CustomEvent('unifiedPoseUpdate', {
+          detail: unifiedPoseData
+        }));
       }
     }
   }
