@@ -51,11 +51,13 @@ let leftForearmBone = null;
 let rightForearmBone = null;
 let leftThighBone = null;
 let rightThighBone = null;
+let leftwrist = null;
+let rightwrist = null;
 let spine = null;
 
 // Load GLB model
 const loader = new GLTFLoader();
-loader.load('models/boy.glb', (gltf) => {
+loader.load('models/humanoid.glb', (gltf) => {
   const model = gltf.scene;
   model.scale.set(1.5, 1.5, 1.5);
   model.position.set(0, -1.5, 0);
@@ -96,8 +98,13 @@ loader.load('models/boy.glb', (gltf) => {
       } else if (obj.name.toLowerCase().includes('rightupleg_65')) {
         rightThighBone = obj;
         console.log("Found right fore thigh bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('lefthand_25')) {
+        leftwrist = obj;
+        console.log("Found left left wrist bone:", obj.name);
+      } else if (obj.name.toLowerCase().includes('righthand_49')) {
+        rightwrist = obj;
+        console.log("Found right right wrist bone:", obj.name);
       }
-      
       
     }
   });
@@ -114,12 +121,8 @@ function degToRad(degrees) {
 }
 
 window.addEventListener('unifiedPoseUpdate', (event) => {
-  const { head, shoulders, arms, forearms, torso, thighs } = event.detail;
-  // console.log('Unified pose update received:', event.detail);
-  // console.log(leftForearmBone, rightForearmBone)
-  // setTimeout(()=>{
-  //   console.log("Waited");
-  // },30000)
+  const { head, shoulders, arms, forearms, torso, thighs, wrist } = event.detail;
+
     
   if (headBone) {
     headBone.rotation.x = -head.x;
@@ -142,43 +145,54 @@ window.addEventListener('unifiedPoseUpdate', (event) => {
   }
 
   if(leftArmBone && rightArmBone) {
-    leftArmBone.rotation.x =arms.left.x; // rotation on the left and right axis works
-    //leftArmBone.rotation.y = arms.left.y;
-    //leftArmBone.rotation.z = -arms.left.z;
+    leftArmBone.rotation.x = arms.left.x; // rotation on the left and right axis works
+  //   //leftArmBone.rotation.y = arms.left.y;
+  //   //leftArmBone.rotation.z = -arms.left.z;
 
     rightArmBone.rotation.x = arms.right.x; // rotation on the left and right axis works
-    //rightArmBone.rotation.y = arms.right.y;
-    //rightArmBone.rotation.z = -arms.right.z;
-  }
+  //   //rightArmBone.rotation.y = arms.right.y;
+  //   //rightArmBone.rotation.z = -arms.right.z;
+   }
 
   if ( leftForearmBone && rightForearmBone ) {
     
-    leftForearmBone.rotation.x = forearms.left.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
-    // leftForearmBone.rotation.y = forearms.left.y; // half baked but decent. But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
-    leftForearmBone.rotation.z = -forearms.left.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
+  leftForearmBone.rotation.x = forearms.left.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
+  //   // leftForearmBone.rotation.y = forearms.left.y; // half baked but decent. But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
+  leftForearmBone.rotation.z = -forearms.left.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
 
     
-    rightForearmBone.rotation.x= forearms.right.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
-     // rightForearmBone.rotation.y = forearms.right.y; // But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
-    rightForearmBone.rotation.z = -forearms.right.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
+ rightForearmBone.rotation.x= forearms.right.x; // works but I generall am not a big fan of it, this moves in the left and right axis only. I think a clamp maybe would make this a bit more powerful than what it is right now :)
+  //    // rightForearmBone.rotation.y = forearms.right.y; // But also when I do the trial run I cant see anything that is useful from it so I am wondering if it is any useful at all
+  rightForearmBone.rotation.z = -forearms.right.z; // if required a negative would do the job, something is working the front and back going arms are all working and I am here wondering what the hell how is this possible
 
-    console.log("forearms", forearms)
+  //   console.log("forearms", forearms)
+   }
+
+  if ( leftwrist && rightwrist ) {
+    // Apply wrist rotations (pitch, yaw, roll)
+    leftwrist.rotation.x = wrist.left.x;
+     //leftwrist.rotation.y = wrist.left.y;
+     leftwrist.rotation.z = -wrist.left.z;
+
+    //rightwrist.rotation.x = wrist.right.x;
+     rightwrist.rotation.y = wrist.right.y;
+     rightwrist.rotation.z = -wrist.right.z;
   }
 
-  if (leftThighBone && rightThighBone) {
+  // if (leftThighBone && rightThighBone) {
 
-    console.log("thigs", thighs);
-    console.log("bones", leftThighBone, rightThighBone);
+  //   console.log("thigs", thighs);
+  //   console.log("bones", leftThighBone, rightThighBone);
 
-    leftThighBone.rotation.x = thighs.left.x;
-    // leftThighBone.rotation.y = thighs.left.y;
-    // leftThighBone.rotation.z = thighs.left.z;
+  //   leftThighBone.rotation.x = thighs.left.x;
+  //   // leftThighBone.rotation.y = thighs.left.y;
+  //   // leftThighBone.rotation.z = thighs.left.z;
 
 
-    rightThighBone.rotation.x = thighs.right.x;
-    // rightThighBone.rotation.y = thighs.right.y;
-    // rightThighBone.rotation.z = thighs.right.z;
-  }
+  //   rightThighBone.rotation.x = thighs.right.x;
+  //   // rightThighBone.rotation.y = thighs.right.y;
+  //   // rightThighBone.rotation.z = thighs.right.z;
+  // }
 
 });
 

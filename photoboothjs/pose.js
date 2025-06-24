@@ -105,6 +105,12 @@ let legCalibrationOffset = {
   right: { x: 0, y: 0, z: 0 }
 };
 
+// Add wrist calibration offset
+let wristCalibrationOffset = {
+  left: { x: 0, y: 0, z: 0 },
+  right: { x: 0, y: 0, z: 0 }
+};
+
 // Add these variables at the top with other variables
 let debugInfo = {
   head: { x: 0, y: 0, z: 0 },
@@ -119,6 +125,7 @@ let debugInfo = {
   upperArmVector: { x: 0, y: 0, z: 0 },
   forearmVector: { x: 0, y: 0, z: 0 },
   thighs: { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+  wrists: { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
 };
 
 let lastFrameTime = 0;
@@ -409,6 +416,32 @@ function calculateCalibrationOffset() {
     z: torsoSum.z / calibrationSamples.length
   };
 
+  // Calculate wrist calibration offset
+  const wristSum = calibrationSamples.reduce((acc, sample) => ({
+    left: {
+      x: acc.left.x + (sample.wristAngles?.left?.x || 0),
+      y: acc.left.y + (sample.wristAngles?.left?.y || 0),
+      z: acc.left.z + (sample.wristAngles?.left?.z || 0)
+    },
+    right: {
+      x: acc.right.x + (sample.wristAngles?.right?.x || 0),
+      y: acc.right.y + (sample.wristAngles?.right?.y || 0),
+      z: acc.right.z + (sample.wristAngles?.right?.z || 0)
+    }
+  }), { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } });
+  wristCalibrationOffset = {
+    left: {
+      x: wristSum.left.x / calibrationSamples.length,
+      y: wristSum.left.y / calibrationSamples.length,
+      z: wristSum.left.z / calibrationSamples.length
+    },
+    right: {
+      x: wristSum.right.x / calibrationSamples.length,
+      y: wristSum.right.y / calibrationSamples.length,
+      z: wristSum.right.z / calibrationSamples.length
+    }
+  };
+
   // Log detailed calibration results
   //console.log('Calibration complete:', {
   //   headOffset: {
@@ -484,7 +517,13 @@ function calculateCalibrationOffset() {
     !isNaN(forearmCalibrationOffset.right.z) &&
     !isNaN(torsoCalibrationOffset.x) &&
     !isNaN(torsoCalibrationOffset.y) &&
-    !isNaN(torsoCalibrationOffset.z)
+    !isNaN(torsoCalibrationOffset.z) &&
+    !isNaN(wristCalibrationOffset.left.x) &&
+    !isNaN(wristCalibrationOffset.left.y) &&
+    !isNaN(wristCalibrationOffset.left.z) &&
+    !isNaN(wristCalibrationOffset.right.x) &&
+    !isNaN(wristCalibrationOffset.right.y) &&
+    !isNaN(wristCalibrationOffset.right.z)
   );
 
   if (!isValid) {
@@ -500,6 +539,10 @@ function calculateCalibrationOffset() {
       right: { x: 0, y: 0, z: 0 }
     };
     torsoCalibrationOffset = { x: 0, y: 0, z: 0 };
+    wristCalibrationOffset = {
+      left: { x: 0, y: 0, z: 0 },
+      right: { x: 0, y: 0, z: 0 }
+    };
     isCalibrated = false;
     return false;
   }
@@ -554,12 +597,14 @@ function onPoseResults(results) {
     const armAngles = calculateArmAngles(results.poseLandmarks);
     const forearmAngles = calculateForearmAngles(results.poseLandmarks);
     const torsoAngles = calculateTorsoAngles(results.poseLandmarks);
+    const wristAngles = calculateWristAngles(results.poseLandmarks);
     
     // Store the latest angles for calibration
     window.lastShoulderAngles = shoulderAngles;
     window.lastArmAngles = armAngles;
     window.lastForearmAngles = forearmAngles;
     window.lastTorsoAngles = torsoAngles;
+    window.lastWristAngles = wristAngles;
     
     if (isCalibrated) {
       // Update debug info
@@ -567,6 +612,7 @@ function onPoseResults(results) {
       debugInfo.arms = armAngles;
       debugInfo.forearms = forearmAngles;
       debugInfo.torso = torsoAngles;
+      debugInfo.wrists = wristAngles;
 
       // Calculate elbow angles
       const leftElbowAngle = calculateElbowAngle(
@@ -614,7 +660,8 @@ function onPoseResults(results) {
         arms: armAngles,
         forearms: forearmAngles,
         torso: torsoAngles,
-        thighs: thighAngles
+        thighs: thighAngles,
+        wrist: wristAngles
       };
 
       // Dispatch unified pose update event
@@ -1126,6 +1173,7 @@ function onFaceMeshResults(results) {
           const armAngles = window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           const forearmAngles = window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
           const torsoAngles = window.lastTorsoAngles || { x: 0, y: 0, z: 0 };
+          const wristAngles = calculateWristAngles(landmarks);
           const thighAngles = calculateThighAngles(landmarks);
           
           calibrationSamples.push({
@@ -1134,6 +1182,7 @@ function onFaceMeshResults(results) {
             armAngles,
             forearmAngles,
             torsoAngles,
+            wristAngles,
             thighAngles
           });
         }
@@ -1183,6 +1232,7 @@ function onFaceMeshResults(results) {
           shoulders: window.lastShoulderAngles || { left: 0, right: 0 },
           arms: window.lastArmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
           forearms: window.lastForearmAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
+          wrist: window.lastWristAngles || { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } },
         };
 
         // Dispatch unified pose update event
@@ -1425,6 +1475,66 @@ function calculateThighRotation(hip, knee, reference) {
     x: pitch,
     y: yaw,
     z: roll
+  };
+}
+
+function calculateWristAngles(landmarks) {
+  if (!landmarks) return { left: { x: 0, y: 0, z: 0 }, right: { x: 0, y: 0, z: 0 } };
+
+  // Use wrist, index, and pinky for orientation
+  // MediaPipe Pose: 15=left_wrist, 17=left_pinky, 19=left_index
+  //                16=right_wrist, 18=right_pinky, 20=right_index
+  const leftWrist = landmarks[15];
+  const leftPinky = landmarks[17];
+  const leftIndex = landmarks[19];
+  const rightWrist = landmarks[16];
+  const rightPinky = landmarks[18];
+  const rightIndex = landmarks[20];
+
+  // Helper to calculate wrist orientation
+  function getWristRotation(wrist, index, pinky, offset) {
+    // Vector from wrist to index (forward direction)
+    const vIndex = {
+      x: index.x - wrist.x,
+      y: index.y - wrist.y,
+      z: index.z - wrist.z
+    };
+    // Vector from wrist to pinky (side direction)
+    const vPinky = {
+      x: pinky.x - wrist.x,
+      y: pinky.y - wrist.y,
+      z: pinky.z - wrist.z
+    };
+    // Normal vector (up direction) via cross product
+    const up = {
+      x: vIndex.y * vPinky.z - vIndex.z * vPinky.y,
+      y: vIndex.z * vPinky.x - vIndex.x * vPinky.z,
+      z: vIndex.x * vPinky.y - vIndex.y * vPinky.x
+    };
+    // Normalize vectors
+    const normalize = (v) => {
+      const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+      return { x: v.x / len, y: v.y / len, z: v.z / len };
+    };
+    const fwd = normalize(vIndex);
+    const side = normalize(vPinky);
+    const upN = normalize(up);
+    // Pitch: up/down (rotation around side axis)
+    const pitch = Math.asin(fwd.y);
+    // Yaw: left/right (rotation around up axis)
+    const yaw = Math.atan2(fwd.x, fwd.z);
+    // Roll: twist (rotation around forward axis)
+    const roll = Math.atan2(side.y, side.x);
+    // Apply calibration offset
+    return {
+      x: pitch - offset.x,
+      y: yaw - offset.y,
+      z: roll - offset.z
+    };
+  }
+  return {
+    left: getWristRotation(leftWrist, leftIndex, leftPinky, wristCalibrationOffset.left),
+    right: getWristRotation(rightWrist, rightIndex, rightPinky, wristCalibrationOffset.right)
   };
 }
 
